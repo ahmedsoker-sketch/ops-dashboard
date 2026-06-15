@@ -1051,7 +1051,7 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbx7no0xtjQMkqzl2JYPDYLcWPFpWcURl0oNHnTHRMLRmNZK7cE_w1W_d4MHY7aD3S2H/exec";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwKH6VXpcjDzq-GQY12302204D8LLux8YiUUmCcmwWQyozqvpFMjn6W49eZa-OrcwxO/exec";
 
 async function loadSharedActions(){
   try{
@@ -1071,7 +1071,7 @@ async function loadSharedActions(){
           dateStr = d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
         }
         newActions[a.key]=JSON.stringify({text:a.text, date:dateStr, ts:Date.now()});
-        if(a.done===true||a.done==="1"||a.done===1||a.done==="true") newDone[a.key]=true;
+        if(a.done===true||a.done==="1"||a.done===1||a.done==="true"||a.done===true) newDone[a.key]=true;
       }
     });
     state.actions=newActions;
