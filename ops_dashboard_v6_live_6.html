@@ -1279,7 +1279,7 @@ function handleDrop(e){
 
 /* zone name → id */
 function zoneIdFromName(s){
-  const t=(s||"").trim().toLowerCase().replace(/_/g," ");
+  const t=(s||"").trim().toLowerCase().replace(/_/g," ").replace(/\s+/g," ");
   if(!t) return null;
   if(t.includes("mohand")||t.includes("u0645u0647u0646u062fu0633")) return "moh";
   if(t.includes("ahram")) return "hah";
@@ -1311,7 +1311,7 @@ function colKey(h){
   // Delivery Time
   if(/^dt\b|^dt \(min|delivery time/.test(t)) return "dt";
   // Accepting / Acceptance Time
-  if(/rider accepting time|accepting time|acceptance rate/.test(t)) return "accept_time";
+  if(/rider accepting time|^accepting time/.test(t)) return "accept_time";
   // Transport Fail
   if(/transport fail/.test(t)) return "transport_fail";
   // Fail Rate (general)
