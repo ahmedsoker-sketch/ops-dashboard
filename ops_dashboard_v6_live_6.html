@@ -1002,7 +1002,13 @@ function whyButton(zid){
 }
 function toggleOff(zid){
   const w=document.getElementById("offwrap-"+zid);
-  if(w) w.classList.toggle("open");
+  if(!w) return;
+  const isOpening = !w.classList.contains("open");
+  w.classList.toggle("open");
+  // Rebuild with latest WH data each time we open
+  if(isOpening){
+    w.innerHTML = officesHTML(zid);
+  }
 }
 
 /* offices table for a zone, sorted by gap vs target (most under target first) */
