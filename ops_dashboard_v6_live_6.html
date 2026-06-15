@@ -673,14 +673,14 @@ async function loadState(){
     else if(window.localStorage){raw=window.localStorage.getItem(STORE_KEY);}
     if(raw){const s=JSON.parse(raw);
       state.labels=Object.assign(state.labels,s.labels||{});
-      state.edits=s.edits||{}; state.actions=s.actions||{}; state.targets=s.targets||{}; state.actionDone=s.actionDone||{};
+      state.edits=s.edits||{}; state.actions=s.actions||{}; state.targets=s.targets||{};
       // sheetCache is NOT saved to storage (too large) — rebuilt on sync
     }
   }catch(e){}
 }
 async function saveState(){
   // save state WITHOUT sheetCache — cache is rebuilt via sync
-  const payload=JSON.stringify({labels:state.labels, edits:state.edits, actions:state.actions, targets:state.targets, actionDone:state.actionDone});
+  const payload=JSON.stringify({labels:state.labels, edits:state.edits, actions:state.actions, targets:state.targets});
   try{
     if(window.storage&&window.storage.set){await window.storage.set(STORE_KEY,payload);}
     else if(window.localStorage){window.localStorage.setItem(STORE_KEY,payload);}
@@ -2046,9 +2046,10 @@ document.addEventListener("click", function(e){
 
   // ② حمّل الـ storage في الخلفية (لا يوقف العرض)
   try { await loadState(); } catch(e){}
+  loadActionDone(); // override actionDone from localStorage after loadState
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
-  loadActionDone();
+  loadActionDone(); // reload again after loadSharedActions to keep done state
 
   // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns
   populateDateDropdowns();
