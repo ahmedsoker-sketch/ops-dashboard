@@ -1054,15 +1054,19 @@ async function loadSharedActions(){
     const data = JSON.parse(text);
     if(!Array.isArray(data)||data.length===0) return;
     const newActions={};
-    const newDone={};
     data.forEach(function(a){
       if(a.key && a.text){
-        newActions[a.key]=JSON.stringify({text:a.text, date:a.date||"", ts:Date.now()});
-        if(a.done===true||a.done==="1"||a.done===1) newDone[a.key]=true;
+        // normalize date
+        let dateStr = a.date||"";
+        if(dateStr && dateStr.includes("T")){
+          const d = new Date(dateStr);
+          dateStr = d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+        }
+        newActions[a.key]=JSON.stringify({text:a.text, date:dateStr, ts:Date.now()});
       }
     });
     state.actions=newActions;
-    state.actionDone=newDone;
+    // do NOT overwrite actionDone — loaded from localStorage
   }catch(e){}
 }
 
