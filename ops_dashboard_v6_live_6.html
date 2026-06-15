@@ -1049,14 +1049,16 @@ async function loadSharedActions(){
   try{
     const resp = await fetch(ACTIONS_SCRIPT_URL+"?action=getActions", {cache:"no-store"});
     if(!resp.ok) return;
-    const data = await resp.json();
-    // rebuild state.actions from sheet
+    const text = await resp.text();
+    if(!text || text==="[]") return;
+    const data = JSON.parse(text);
+    if(!Array.isArray(data)||data.length===0) return;
     const newActions={};
     const newDone={};
     data.forEach(function(a){
       if(a.key && a.text){
-        newActions[a.key]=JSON.stringify({text:a.text, date:a.date, ts:Date.now()});
-        if(a.done) newDone[a.key]=true;
+        newActions[a.key]=JSON.stringify({text:a.text, date:a.date||"", ts:Date.now()});
+        if(a.done===true||a.done==="1"||a.done===1) newDone[a.key]=true;
       }
     });
     state.actions=newActions;
