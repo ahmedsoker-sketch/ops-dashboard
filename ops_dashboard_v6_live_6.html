@@ -1188,6 +1188,11 @@ async function loadWHData(){
     }
     whCache = zoneData;
     whTargets = targetData;
+    console.log("WH loaded - dates:", whDates.slice(0,5), "...total:", whDates.length);
+    console.log("WH zones:", Object.keys(whCache));
+    // Test: find Jun 14 col
+    const testIdx = findWHDateCol("Jun 14");
+    console.log("Jun 14 col index:", testIdx, "header:", whDates[testIdx]);
   }catch(e){ console.error("loadWHData error:",e); }
 }
 
