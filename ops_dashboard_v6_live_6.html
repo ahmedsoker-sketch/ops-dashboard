@@ -1164,7 +1164,8 @@ function getWHForDate(zid, dateLabel){
 }
 
 function findWHDateCol(dateLabel){
-  // dateLabel like "Jun 13" → try to match "6/13" or "6/1" etc.
+  // dateLabel like "Jun 13"
+  // WH sheet headers like "Mon Jun 01 2026 00:00:00 GMT+0300..."
   if(!dateLabel) return -1;
   const m = dateLabel.match(/([a-z]+)\s*(\d+)/i);
   if(!m) return -1;
@@ -1172,10 +1173,16 @@ function findWHDateCol(dateLabel){
   const mo = months[m[1].toLowerCase().slice(0,3)];
   if(!mo) return -1;
   const day = parseInt(m[2]);
-  // try formats: "6/13", "6/1", " 6/13"
   for(let i=0; i<whDates.length; i++){
     const d = whDates[i].trim();
-    const dm = d.match(/(\d+)\/(\d+)/);
+    // Match "Mon Jun 01 2026..." format
+    const fullM = d.match(/\b([A-Za-z]{3})\s+(\d{1,2})\b/);
+    if(fullM){
+      const dMo = months[fullM[1].toLowerCase()];
+      if(dMo===mo && parseInt(fullM[2])===day) return i;
+    }
+    // Fallback: "6/13" format
+    const dm = d.match(/^(\d+)\/(\d+)/);
     if(dm && parseInt(dm[1])===mo && parseInt(dm[2])===day) return i;
   }
   return -1;
