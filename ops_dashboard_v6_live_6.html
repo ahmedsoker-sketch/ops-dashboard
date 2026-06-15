@@ -1013,9 +1013,13 @@ function toggleOff(zid){
 
 /* offices table for a zone, sorted by gap vs target (most under target first) */
 function officeTarget(zid,name){
+  // 1. Manual edit by user takes priority
   const t=state.targets[zid+"|"+name];
   if(t!=null&&t!==""){ const n=parseFloat(t); if(!isNaN(n))return n; }
-  const base=TARGETS[zid]&&TARGETS[zid][name];   // fixed monthly target
+  // 2. Live target from WH sheet
+  if(whTargets[zid]&&whTargets[zid][name]!=null) return whTargets[zid][name];
+  // 3. Hardcoded fallback
+  const base=TARGETS[zid]&&TARGETS[zid][name];
   return (base==null)?null:base;
 }
 function officesHTML(zid){
@@ -1115,9 +1119,10 @@ const ACTIONS_KEY="tlbOpsActions_v1";
 const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwswyvZDsYwM16PrhCdW1Tbeo59dHnSi47oFg-JkmQMZyOme7rYLOWN1Pv6skQjxnfQ/exec";
 const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwswyvZDsYwM16PrhCdW1Tbeo59dHnSi47oFg-JkmQMZyOme7rYLOWN1Pv6skQjxnfQ/exec?action=getWH";
 
-/* whCache: {zone_name: {date: hours}} — loaded once on startup */
+/* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
-let whDates = []; // sorted dates from WH sheet e.g. ["6/1","6/2",...]
+let whDates = [];
+let whTargets = {}; // {zid: {tplName: target}}
 
 async function loadWHData(){
   try{
@@ -1126,30 +1131,64 @@ async function loadWHData(){
     const text = await resp.text();
     if(!text || text.startsWith("ERROR") || text==="[]") return;
 
-    // Parse CSV: A=Helper(ignore), B=3PL Name, C=zone_name, D+=dates
+    // Parse CSV — split respecting quotes
     const lines = text.split(/\r?\n/).filter(l=>l.trim());
     if(lines.length < 2) return;
 
-    // header row: Helper, 3PL Name, zone_name, 6/1, 6/2, ...
-    const headers = lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));
-    // date columns start at index 3
-    whDates = headers.slice(3);
+    // Parse header row properly (handle quoted cells)
+    function splitCSV(line){
+      const out=[]; let cur="",q=false;
+      for(let i=0;i<line.length;i++){
+        const c=line[i];
+        if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}
+        else if(c===','&&!q){out.push(cur.trim());cur="";}
+        else cur+=c;
+      }
+      out.push(cur.trim()); return out;
+    }
 
-    // build whCache: {zone_id: { "3PL Name": [hours per date...] }}
+    const headers = splitCSV(lines[0]).map(h=>h.replace(/^"|"$/g,"").trim());
+
+    // Find "Normal Target" column index
+    let targetCol = -1;
+    for(let j=0;j<headers.length;j++){
+      if(headers[j].toLowerCase().includes("normal target")){targetCol=j;break;}
+    }
+
+    // Date columns: from index 3 up to (but not including) Average/target columns
+    // Stop at first non-date-looking header after col 3
+    let dateEndCol = 3;
+    for(let j=3;j<headers.length;j++){
+      const h = headers[j];
+      // date headers contain month names or slashes
+      if(/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h)){
+        dateEndCol = j+1;
+      } else if(dateEndCol > 3) break; // stop once we hit non-date
+    }
+    whDates = headers.slice(3, dateEndCol);
+
     const zoneData = {};
+    const targetData = {};
     for(let i=1; i<lines.length; i++){
-      const cells = lines[i].split(",").map(c=>c.trim().replace(/^"|"$/g,""));
+      const cells = splitCSV(lines[i]).map(c=>c.replace(/^"|"$/g,"").trim());
       const tplName = cells[1]||"";
       const zoneName = cells[2]||"";
       if(!tplName || !zoneName) continue;
       const zid = zoneIdFromName(zoneName);
       if(!zid) continue;
       if(!zoneData[zid]) zoneData[zid]={};
-      const hours = cells.slice(3).map(v=>{ const n=parseFloat(v); return isNaN(n)?0:n; });
+      if(!targetData[zid]) targetData[zid]={};
+      const hours = cells.slice(3, dateEndCol).map(v=>{ const n=parseFloat(v); return isNaN(n)?0:n; });
       zoneData[zid][tplName] = hours;
+      // Read Normal Target
+      if(targetCol >= 0){
+        const t = parseFloat(cells[targetCol]);
+        if(!isNaN(t)) targetData[zid][tplName] = t;
+      }
     }
     whCache = zoneData;
-  }catch(e){}
+    whTargets = targetData;
+  }catch(e){ console.error("loadWHData error:",e); }
 }
 
 /* Get hours for a zone's 3PLs for a specific date label like "Jun 13" */
