@@ -1019,8 +1019,16 @@ function officesHTML(zid){
       <td>${tgtCell}</td>
       <td>${gapCell}</td>
       <td class="num ${dcls}" style="color:var(--muted)">${dsign}${o.dod}</td>
-      <td><div class="actwrap"><input type="text" placeholder="Action taken…" value="${escapeAttr(actVal)}"
-         onchange="setAction('${escapeAttr(zid)}','${escapeAttr(o.name)}',this.value)"></div></td>
+      <td><div class="actwrap" style="display:flex;gap:6px;align-items:center">
+        <input type="text" placeholder="Action taken…" value="${escapeAttr(actVal)}"
+          id="act-${escapeAttr(zid)}-${escapeAttr(o.name)}"
+          onkeydown="if(event.key==='Enter'){confirmAction('${escapeAttr(zid)}','${escapeAttr(o.name)}');this.blur()}"
+          style="flex:1">
+        <button onclick="confirmAction('${escapeAttr(zid)}','${escapeAttr(o.name)}')"
+          style="font-size:13px;padding:6px 10px;border-radius:8px;cursor:pointer;border:1px solid var(--good-line);background:var(--good-bg);color:var(--good);font-weight:700;white-space:nowrap">
+          ✓
+        </button>
+      </div></td>
     </tr>`;
   });
   return `<div class="offnote">${note}</div>
@@ -1054,19 +1062,22 @@ async function loadSharedActions(){
     const data = JSON.parse(text);
     if(!Array.isArray(data)||data.length===0) return;
     const newActions={};
+    const newDone={};
     data.forEach(function(a){
       if(a.key && a.text){
-        // normalize date
         let dateStr = a.date||"";
         if(dateStr && dateStr.includes("T")){
           const d = new Date(dateStr);
           dateStr = d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
         }
         newActions[a.key]=JSON.stringify({text:a.text, date:dateStr, ts:Date.now()});
+        if(a.done===true||a.done==="1"||a.done===1||a.done==="true") newDone[a.key]=true;
       }
     });
     state.actions=newActions;
-    // do NOT overwrite actionDone — loaded from localStorage
+    state.actionDone=newDone;
+    // sync done to localStorage
+    try{ localStorage.setItem("tlbActionDone", JSON.stringify(newDone)); }catch(e){}
   }catch(e){}
 }
 
@@ -1084,6 +1095,23 @@ async function saveSharedActions(){
       body:JSON.stringify({type:"save", actions:entries})
     });
   }catch(e){}
+}
+
+async function confirmAction(zid, name){
+  const id="act-"+zid+"-"+name;
+  const inp=document.getElementById(id);
+  if(!inp) return;
+  const v=inp.value;
+  await setAction(zid,name,v);
+  // show brief green flash on the button
+  const btn=inp.nextElementSibling;
+  if(btn){
+    const orig=btn.innerHTML;
+    btn.innerHTML="✓ Saved!";
+    btn.style.background="var(--good)";
+    btn.style.color="#fff";
+    setTimeout(()=>{btn.innerHTML=orig;btn.style.background="var(--good-bg)";btn.style.color="var(--good)";},1500);
+  }
 }
 
 async function setAction(zid,name,v){
@@ -1192,9 +1220,8 @@ function renderLog(){
 async function toggleActionDone(key){
   if(!state.actionDone) state.actionDone={};
   state.actionDone[key]=!state.actionDone[key];
-  // save done state to localStorage only
   try{ localStorage.setItem("tlbActionDone", JSON.stringify(state.actionDone)); }catch(e){}
-  await saveState();
+  await saveSharedActions();
   renderLog();
   renderTabs();
 }
