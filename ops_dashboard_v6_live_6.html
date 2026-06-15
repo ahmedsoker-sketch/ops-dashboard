@@ -229,6 +229,11 @@
     .offtbl th,.offtbl td{padding:7px 7px}
     h1{font-size:18px}
   }
+  /* view mode toggle */
+  .vmode{display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .vmode button{border:none;padding:7px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);background:transparent;transition:.15s}
+  .vmode button.active{background:var(--ink2);color:#fff}
+  .vmode button:hover:not(.active){background:var(--bg)}
 </style>
 </head>
 <body>
@@ -238,7 +243,13 @@
       <h1>Giza Ops</h1>
       <div class="sub">Last two days per zone — good or bad at a glance</div>
     </div>
-    <div class="daterow" id="datepickers">
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+      <div class="vmode" id="vmodeBar">
+        <button class="active" onclick="setViewMode('day')" id="vDay">📅 Day</button>
+        <button onclick="setViewMode('week')" id="vWeek">📆 Week</button>
+        <button onclick="setViewMode('month')" id="vMonth">🗓 Month</button>
+      </div>
+      <div class="daterow" id="datepickers">
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
         Day 1 (main):
         <select id="pickToday" onchange="onDatePick()" style="font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;cursor:pointer">
@@ -252,16 +263,12 @@
           <option value="">— sync first —</option>
         </select>
       </label>
+      </div>
     </div>
   </header>
 
   <div class="toolbar">
-    <button id="syncBtn" class="primary" onclick="openSyncModal()">🔄 Sync from Google Sheets</button>
-    <button id="addZoneBtn" onclick="toggleAddZone()">➕ Add Zone</button>
-    <button id="importBtn" onclick="toggleImport()">⬆ Paste manually</button>
     <button id="editBtn" onclick="toggleEdit()">✎ Edit numbers</button>
-    <button id="sheetCfgBtn" onclick="toggleSheetCfg()">⚙ Sheet URLs</button>
-    <button id="resetBtn" onclick="resetAll()">Reset</button>
   </div>
 
   <!-- Live sync status bar -->
@@ -456,7 +463,7 @@
 
   <div class="foot">
     Source: the zone sheet (daily numbers) + the offices sheet "3PL WH" for drilling into a working-hours drop.<br>
-    At office level only working hours are available right now — the other metrics are still at zone level.
+    At 3PL level only working hours are available right now — the other metrics are still at zone level.
   </div>
 </div>
 
@@ -537,7 +544,7 @@ const ZONES = [
 ];
 
 /* ---------- offices: working hours per office [Jun 13, Jun 12] ---------- */
-const OFFICES = {
+const 3PLS = {
   had:[
     ["MTA",448,550],["El Tohami",217,278],["El Abtal",221,240],["Top delivery",1479,1557],
     ["BeCool",97,117],["Al Alamia",251,211],["Jasson",412,370],["Full Speed",324,310],
@@ -748,7 +755,7 @@ function onDatePick(){
   state.labels.prev=document.getElementById("pickPrev").value;
   // clear manual edits when date changes so we pull from sheetCache
   state.edits={};
-  applySheetCacheToState();
+  applyViewModeToState();
   saveState();
   render();
 }
@@ -957,7 +964,7 @@ function renderZone(zid){
 }
 
 function whyButton(zid){
-  return `<div class="why"><button class="whybtn" onclick="toggleOff('${zid}')">Why? / Offices ▾</button></div>`;
+  return `<div class="why"><button class="whybtn" onclick="toggleOff('${zid}')">Why? / 3PL ▾</button></div>`;
 }
 function toggleOff(zid){
   const w=document.getElementById("offwrap-"+zid);
@@ -973,7 +980,7 @@ function officeTarget(zid,name){
 }
 function officesHTML(zid){
   // t = latest reviewed day's hours, p = the day before
-  const list=(OFFICES[zid]||[]).map(o=>{
+  const list=(3PLS[zid]||[]).map(o=>{
     const tgt=officeTarget(zid,o[0]);
     const gap=(tgt!=null)?(o[1]-tgt):null;   // gap vs target (negative = under target)
     return {name:o[0], t:o[1], p:o[2], dod:o[1]-o[2], tgt, gap};
@@ -988,12 +995,12 @@ function officesHTML(zid){
 
   let note;
   if(!anyTarget){
-    note=`Enter each office's hours target in the "Target" column (or paste them) — and I'll surface the offices most under target and tell you who's behind the drop.`;
+    note=`Enter each 3PL's hours target in the "Target" column (or paste them) — and I'll surface the 3PLs most under target and tell you who's behind the drop.`;
   }else if(under.length===0){
     note=`Every office with a target has met or beaten it — no office is under target in this zone.`;
   }else{
     const names=top3.map(o=>`${o.name} (${o.gap})`).join(", ");
-    note=`Top ${top3.length} offices under target: <b>${names}</b>. These are behind the hours shortfall — note the action taken next to each.`;
+    note=`Top ${top3.length} 3PLs under target: <b>${names}</b>. These are behind the hours shortfall — note the action taken next to each 3PL.`;
   }
 
   let rows="";
@@ -1033,7 +1040,7 @@ function officesHTML(zid){
   });
   return `<div class="offnote">${note}</div>
     <table class="offtbl"><thead><tr>
-      <th>Office</th><th>Hours (${state.labels.today||"Day 1"})</th><th>Target</th><th>Gap vs target</th><th>Change vs Day 2</th><th>Action</th>
+      <th>3PL</th><th>Hours (${state.labels.today||"Day 1"})</th><th>Target</th><th>Gap vs target</th><th>Change vs Day 2</th><th>Action</th>
     </tr></thead><tbody>${rows}</tbody></table>
     <div class="offnote" style="margin-top:8px">Sorted by gap vs target (most under target first). "Change vs yest." is for reference only. Targets are saved automatically.</div>`;
 }
@@ -1185,7 +1192,7 @@ function renderLog(){
       </div>
       <table>
         <thead><tr>
-          <th>Date</th><th>Zone</th><th>Office</th><th>Action</th><th>Status</th>
+          <th>Date</th><th>Zone</th><th>3PL</th><th>Action</th><th>Status</th>
         </tr></thead>
         <tbody>${rows.map(rowHtml).join("")}</tbody>
       </table>
@@ -1202,7 +1209,7 @@ function renderLog(){
   </div>`;
 
   if(allEntries.length===0){
-    html+=`<div class="panel"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / Offices ▾" and type an action next to an office.</div></div>`;
+    html+=`<div class="panel"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / 3PL ▾" and type an action next to a 3PL.</div></div>`;
   } else {
     if(pending.length>0) html+=tableWrap(pending,"⏳ Pending","orange");
     if(done.length>0) html+=tableWrap(done,"✅ Done","green");
@@ -1785,7 +1792,7 @@ async function runSyncFromUrl(){
       const pp=document.getElementById("pickPrev"); if(pp)pp.value=state.labels.prev;
     }
     state.edits={};
-    applySheetCacheToState();
+    applyViewModeToState();
     await saveState();
     render();
 
@@ -1946,7 +1953,7 @@ async function syncFromSheets(silent){
     if(!dates.includes(state.labels.today)){state.labels.today=dates[0]||"";document.getElementById("pickToday").value=state.labels.today;}
     if(!dates.includes(state.labels.prev)){state.labels.prev=dates[1]||dates[0]||"";document.getElementById("pickPrev").value=state.labels.prev;}
     state.edits={};
-    applySheetCacheToState();
+    applyViewModeToState();
     await saveState();
     render();
     spin.textContent="✅";
@@ -2034,7 +2041,7 @@ async function confirmAddZone(){
   await saveSheetUrls();
   populateDateDropdowns();
   state.edits={};
-  applySheetCacheToState();
+  applyViewModeToState();
   await saveState();
 
   st.style.color="var(--good)";
@@ -2067,7 +2074,7 @@ document.addEventListener("click", function(e){
   state.labels.today = "Jun 13";
   state.labels.prev  = "Jun 12";
   populateDateDropdowns();
-  applySheetCacheToState();
+  applyViewModeToState();
   render();
   setLiveStatus("syncing", "⏳ <b>جاري الاتصال بالشيت…</b>", "");
 
@@ -2176,7 +2183,7 @@ async function liveRefresh(silent){
     const pt=document.getElementById("pickToday"); if(pt) pt.value=state.labels.today;
     const pp=document.getElementById("pickPrev");  if(pp) pp.value=state.labels.prev;
     state.edits = {};
-    applySheetCacheToState();
+    applyViewModeToState();
     await saveState();
     render();
 
@@ -2199,7 +2206,117 @@ async function liveRefresh(silent){
 }
 
 /* manual "↻ الآن" button */
-/* ── Script URL setup modal ── */
+/* ── View Mode: day / week / month ── */
+let viewMode = "day"; // "day" | "week" | "month"
+
+function setViewMode(mode){
+  viewMode = mode;
+  // update buttons
+  ["day","week","month"].forEach(m=>{
+    const btn = document.getElementById("v"+m.charAt(0).toUpperCase()+m.slice(1));
+    if(btn) btn.classList.toggle("active", m===mode);
+  });
+  // show/hide date pickers
+  const dp = document.getElementById("datepickers");
+  if(dp) dp.style.display = mode==="day" ? "" : "none";
+  // apply new mode and render
+  applyViewModeToState();
+  render();
+}
+
+/* compute average of an array of numbers, ignoring nulls */
+function avgVals(arr){
+  const valid = arr.filter(v=>v!=null&&!isNaN(v));
+  if(!valid.length) return null;
+  return valid.reduce((a,b)=>a+b,0)/valid.length;
+}
+
+/* get week number from a date string */
+function getWeekNum(dateStr){
+  const rows = Object.values(sheetCache).flat();
+  // try to find matching row in sheetCache that has week info
+  for(const rows2 of Object.values(sheetCache)){
+    for(const r of rows2){
+      if(r.date===dateStr && r.week!=null) return r.week;
+    }
+  }
+  // fallback: compute from date
+  const d = new Date(dateStr.replace(/(\w+)\s+(\d+)/,(m,mo,day)=>{
+    const months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    return `2026-${String((months[mo]||0)+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }));
+  if(isNaN(d)) return null;
+  const start = new Date(d.getFullYear(),0,1);
+  return Math.ceil(((d-start)/86400000+start.getDay()+1)/7);
+}
+
+/* get month from date string */
+function getMonthFromDate(dateStr){
+  const months={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+  const m = dateStr.match(/([A-Za-z]+)\s+\d+/);
+  if(m) return months[m[1]]||null;
+  const iso = dateStr.match(/(\d{4})-(\d{2})/);
+  if(iso) return parseInt(iso[2]);
+  return null;
+}
+
+/* apply week or month averages to state.edits */
+function applyViewModeToState(){
+  if(viewMode==="day"){ applySheetCacheToState(); return; }
+
+  const allDatesArr = allDates(); // sorted newest first
+
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    if(!rows.length){ state.edits[z.id]={}; return; }
+
+    let groupFn;
+    if(viewMode==="week"){
+      // group by week number
+      const weeks = [...new Set(rows.map(r=>{
+        const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if(iso){const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7);}
+        return null;
+      }).filter(Boolean))].sort((a,b)=>b-a);
+      const w1=weeks[0], w2=weeks[1];
+      const r1=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return false;const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7)===w1;});
+      const r2=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return false;const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7)===w2;});
+      state.edits[z.id]={};
+      META.forEach(m=>{
+        const vt=avgVals(r1.map(r=>r.vals[m.k]));
+        const vp=avgVals(r2.map(r=>r.vals[m.k]));
+        if(vt!=null||vp!=null) state.edits[z.id][m.k]=[vt!=null?String(vt):null,vp!=null?String(vp):null];
+      });
+    } else if(viewMode==="month"){
+      const months=[...new Set(rows.map(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso?parseInt(iso[2]):null;}).filter(Boolean))].sort((a,b)=>b-a);
+      const m1=months[0], m2=months[1];
+      const r1=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso&&parseInt(iso[2])===m1;});
+      const r2=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso&&parseInt(iso[2])===m2;});
+      state.edits[z.id]={};
+      META.forEach(m=>{
+        const vt=avgVals(r1.map(r=>r.vals[m.k]));
+        const vp=avgVals(r2.map(r=>r.vals[m.k]));
+        if(vt!=null||vp!=null) state.edits[z.id][m.k]=[vt!=null?String(vt):null,vp!=null?String(vp):null];
+      });
+    }
+  });
+
+  // update header labels
+  if(viewMode==="week"){
+    const dates=allDates();
+    const weeks=[...new Set(dates.map(d=>{const iso=d.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return null;const dt=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(dt.getFullYear(),0,1);return Math.ceil(((dt-s)/86400000+s.getDay()+1)/7);}).filter(Boolean))].sort((a,b)=>b-a);
+    state.labels.today="Week "+weeks[0];
+    state.labels.prev="Week "+(weeks[1]||weeks[0]);
+  } else if(viewMode==="month"){
+    const monthNames=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const dates=allDates();
+    const months=[...new Set(dates.map(d=>{const iso=d.match(/(\d{4})-(\d{2})/);return iso?parseInt(iso[2]):null;}).filter(Boolean))].sort((a,b)=>b-a);
+    state.labels.today=monthNames[months[0]]||"This Month";
+    state.labels.prev=monthNames[months[1]]||"Last Month";
+  }
+}
+
+
 function openScriptSetup(){
   const modal = document.getElementById("scriptSetupModal");
   modal.style.display = "flex";
