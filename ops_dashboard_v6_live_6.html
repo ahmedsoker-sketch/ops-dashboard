@@ -2106,17 +2106,19 @@ document.addEventListener("click", function(e){
 
   // ② حمّل الـ storage في الخلفية (لا يوقف العرض)
   try { await loadState(); } catch(e){}
-  loadActionDone(); // override actionDone from localStorage after loadState
+  loadActionDone();
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
-  loadActionDone(); // reload again after loadSharedActions to keep done state
+  loadActionDone();
 
-  // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns
+  // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns وعيد الرسم
   populateDateDropdowns();
   const pt = document.getElementById("pickToday");
   const pp = document.getElementById("pickPrev");
   if(pt) pt.value = state.labels.today;
   if(pp) pp.value = state.labels.prev;
+  applyViewModeToState();
+  render(); // re-render with cached data + loaded state
 
   // ④ ابدأ الـ live polling (بيسحب من الشيت فوراً + كل 5 دقايق)
   startLivePolling();
