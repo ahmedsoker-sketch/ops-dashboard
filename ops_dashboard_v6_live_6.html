@@ -644,7 +644,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/a/macros/talabat.com/s/AKfycbztYkezIC3BasvoUHk7iDfQdRLnuMtBDUoZxFPNnmsoZhZ68Aq-gjGUXt9pAqL4wBMU/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbwswyvZDsYwM16PrhCdW1Tbeo59dHnSi47oFg-JkmQMZyOme7rYLOWN1Pv6skQjxnfQ/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1013,10 +1013,24 @@ function officeTarget(zid,name){
   return (base==null)?null:base;
 }
 function officesHTML(zid){
-  // t = latest reviewed day's hours, p = the day before
-  const list=(OFFICES[zid]||[]).map(o=>{
+  // Try live WH data first, fall back to hardcoded OFFICES
+  const liveToday = getWHForDate(zid, state.labels.today);
+  const livePrev  = getWHForDate(zid, state.labels.prev);
+
+  let rawList;
+  if(liveToday && liveToday.length > 0){
+    // Build from live data
+    const prevMap = {};
+    if(livePrev) livePrev.forEach(([name,h])=>prevMap[name]=h);
+    rawList = liveToday.map(([name,h])=>[name, h, prevMap[name]||0]);
+  } else {
+    // Fall back to hardcoded
+    rawList = OFFICES[zid]||[];
+  }
+
+  const list = rawList.map(o=>{
     const tgt=officeTarget(zid,o[0]);
-    const gap=(tgt!=null)?(o[1]-tgt):null;   // gap vs target (negative = under target)
+    const gap=(tgt!=null)?(o[1]-tgt):null;
     return {name:o[0], t:o[1], p:o[2], dod:o[1]-o[2], tgt, gap};
   });
   // order: offices with a target and under it first (most under), then the rest
@@ -1092,7 +1106,80 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwKH6VXpcjDzq-GQY12302204D8LLux8YiUUmCcmwWQyozqvpFMjn6W49eZa-OrcwxO/exec";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwswyvZDsYwM16PrhCdW1Tbeo59dHnSi47oFg-JkmQMZyOme7rYLOWN1Pv6skQjxnfQ/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwswyvZDsYwM16PrhCdW1Tbeo59dHnSi47oFg-JkmQMZyOme7rYLOWN1Pv6skQjxnfQ/exec?action=getWH";
+
+/* whCache: {zone_name: {date: hours}} — loaded once on startup */
+let whCache = {};
+let whDates = []; // sorted dates from WH sheet e.g. ["6/1","6/2",...]
+
+async function loadWHData(){
+  try{
+    const resp = await fetch(WH_SCRIPT_URL, {cache:"no-store"});
+    if(!resp.ok) return;
+    const text = await resp.text();
+    if(!text || text.startsWith("ERROR") || text==="[]") return;
+
+    // Parse CSV: A=Helper(ignore), B=3PL Name, C=zone_name, D+=dates
+    const lines = text.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length < 2) return;
+
+    // header row: Helper, 3PL Name, zone_name, 6/1, 6/2, ...
+    const headers = lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));
+    // date columns start at index 3
+    whDates = headers.slice(3);
+
+    // build whCache: {zone_id: { "3PL Name": [hours per date...] }}
+    const zoneData = {};
+    for(let i=1; i<lines.length; i++){
+      const cells = lines[i].split(",").map(c=>c.trim().replace(/^"|"$/g,""));
+      const tplName = cells[1]||"";
+      const zoneName = cells[2]||"";
+      if(!tplName || !zoneName) continue;
+      const zid = zoneIdFromName(zoneName);
+      if(!zid) continue;
+      if(!zoneData[zid]) zoneData[zid]={};
+      const hours = cells.slice(3).map(v=>{ const n=parseFloat(v); return isNaN(n)?0:n; });
+      zoneData[zid][tplName] = hours;
+    }
+    whCache = zoneData;
+  }catch(e){}
+}
+
+/* Get hours for a zone's 3PLs for a specific date label like "Jun 13" */
+function getWHForDate(zid, dateLabel){
+  const zd = whCache[zid];
+  if(!zd || !whDates.length) return null;
+
+  // match dateLabel (e.g. "Jun 13") to WH column (e.g. "6/13")
+  const colIdx = findWHDateCol(dateLabel);
+  if(colIdx < 0) return null;
+
+  const result = [];
+  for(const [name, hoursArr] of Object.entries(zd)){
+    const h = hoursArr[colIdx] || 0;
+    result.push([name, h]);
+  }
+  return result.length ? result : null;
+}
+
+function findWHDateCol(dateLabel){
+  // dateLabel like "Jun 13" → try to match "6/13" or "6/1" etc.
+  if(!dateLabel) return -1;
+  const m = dateLabel.match(/([a-z]+)\s*(\d+)/i);
+  if(!m) return -1;
+  const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const mo = months[m[1].toLowerCase().slice(0,3)];
+  if(!mo) return -1;
+  const day = parseInt(m[2]);
+  // try formats: "6/13", "6/1", " 6/13"
+  for(let i=0; i<whDates.length; i++){
+    const d = whDates[i].trim();
+    const dm = d.match(/(\d+)\/(\d+)/);
+    if(dm && parseInt(dm[1])===mo && parseInt(dm[2])===day) return i;
+  }
+  return -1;
+}
 
 async function loadSharedActions(){
   try{
@@ -2111,6 +2198,7 @@ document.addEventListener("click", function(e){
   loadActionDone();
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
+  try { await loadWHData(); } catch(e){}
   loadActionDone();
 
   // ③ عرض الداشبورد بالداتا المحفوظة فوراً
@@ -2208,6 +2296,8 @@ async function liveRefresh(silent){
       }
     }
     saveSheetCache();
+    // reload WH data silently (don't block render)
+    loadWHData().catch(()=>{});
 
     populateDateDropdowns();
     const dates = allDates();
