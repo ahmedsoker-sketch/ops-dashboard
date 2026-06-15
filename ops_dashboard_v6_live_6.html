@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rider Operations — Two-Day Comparison</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#16181d; --muted:#6b7280; --line:#e7e9ee;
+    --good:#137a47; --good-bg:#e8f6ee; --good-line:#bfe6cf;
+    --bad:#c0392b; --bad-bg:#fdecea; --bad-line:#f3c7c1;
+    --watch:#a86412; --watch-bg:#fdf3e3; --watch-line:#f0dcb4;
+    --flat:#8a8f99; --flat-bg:#f1f2f4;
+    --accent:#ff5a00; --ink2:#222631;
+    --r:14px; --shadow:0 1px 3px rgba(16,18,23,.06),0 6px 24px rgba(16,18,23,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Tajawal","Cairo",Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:18px 16px 56px}
+  header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
+  h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .daterow{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+  .daterow b{color:var(--ink)}
+  .toolbar{display:flex;gap:8px;margin:14px 0 6px;flex-wrap:wrap}
+  button{font-family:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);
+    border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;transition:.15s}
+  button:hover{border-color:#cdd1da}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--ink2);color:#fff;border-color:var(--ink2)}
+  button.primary:hover{background:#000}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 14px;border-bottom:1px solid var(--line);padding-bottom:0}
+  .tab{border:none;background:none;padding:9px 4px;margin-right:14px;font-size:14px;font-weight:700;color:var(--muted);
+    border-bottom:3px solid transparent;border-radius:0}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+  .tab:hover{color:var(--ink)}
+
+  /* chip (shared) */
+  .chip{font-size:12.5px;font-weight:800;border-radius:999px;padding:5px 11px;white-space:nowrap;border:1px solid transparent}
+  .chip.good{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+  .chip.watch{background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)}
+  .chip.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+
+  /* ── Zone Map Grid ── */
+  .zmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:6px}
+  .zbox{
+    position:relative;cursor:pointer;border-radius:16px;padding:18px 16px 14px;
+    border:2px solid transparent;transition:transform .15s,box-shadow .15s;
+    background:var(--card);box-shadow:var(--shadow);
+    display:flex;flex-direction:column;gap:5px;min-height:162px;
+  }
+  .zbox:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(16,18,23,.13)}
+  .zbox:active{transform:translateY(0)}
+  .zbox.st-good{border-color:var(--good-line);background:linear-gradient(145deg,#eefaf4 0%,#fff 55%)}
+  .zbox.st-watch{border-color:var(--watch-line);background:linear-gradient(145deg,#fffbf0 0%,#fff 55%)}
+  .zbox.st-bad{border-color:var(--bad-line);background:linear-gradient(145deg,#fef3f2 0%,#fff 55%)}
+  .zbox-name{font-size:14px;font-weight:800;color:var(--ink);padding-right:60px}
+  .zbox-badge{position:absolute;top:14px;right:12px;font-size:10.5px;font-weight:800;
+    border-radius:999px;padding:3px 9px;border:1px solid transparent}
+  .zbox-badge.good{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+  .zbox-badge.watch{background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)}
+  .zbox-badge.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+  .zbox-kpis{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+  .zbox-kpi{display:flex;justify-content:space-between;align-items:center}
+  .zbox-kpi .klab{font-size:11.5px;color:var(--muted);font-weight:600}
+  .zbox-kpi .kval{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:3px}
+  .zbox-kpi .kval.bad{color:var(--bad)}
+  .zbox-kpi .kval.good{color:var(--good)}
+  .zbox-kpi .kval.flat{color:var(--flat)}
+  .zbox-kpi .karr{font-size:9px;opacity:.7}
+  .zbox-footer{margin-top:auto;padding-top:8px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center}
+  .zbox-issues{font-size:11.5px;font-weight:700;color:var(--bad)}
+  .zbox-issues.ok{color:var(--good)}
+  .zbox-tap{font-size:11px;color:var(--muted)}
+
+  /* zone view navigation */
+  .back-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .back-btn{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;
+    color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 0}
+  .back-btn:hover{color:var(--ink)}
+  .znav{display:flex;gap:6px;margin-left:auto}
+  .znav button{font-size:12px;padding:5px 12px}
+
+  /* zone detail table */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+  .ptitle{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:15px 16px;border-bottom:1px solid var(--line)}
+  .ptitle h2{font-size:17px;margin:0;font-weight:800}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;letter-spacing:.02em;color:var(--muted);font-weight:700;text-transform:uppercase;background:#fafbfc}
+  tr:last-child td{border-bottom:none}
+  td.metric{font-weight:700}
+  td.metric small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+  .num{font-variant-numeric:tabular-nums;font-weight:700}
+  .prev{color:var(--muted);font-weight:600}
+  .delta{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;font-weight:800;font-size:12.5px;
+    border-radius:8px;padding:4px 9px;border:1px solid transparent;white-space:nowrap}
+  .delta.good{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+  .delta.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+  .delta.flat{background:var(--flat-bg);color:var(--flat)}
+  .delta.strong{box-shadow:inset 3px 0 0 currentColor}
+  .arrow{font-size:11px}
+  .whrow{background:#fffaf6}
+  .why{margin-top:7px}
+  .whybtn{font-size:12px;font-weight:700;color:var(--accent);background:none;border:1px dashed var(--watch-line);
+    border-radius:8px;padding:5px 10px}
+  .whybtn:hover{background:#fff3ea;border-style:solid}
+  .offwrap{display:none;padding:0 14px 14px}
+  .offwrap.open{display:block}
+  .offnote{font-size:12px;color:var(--muted);margin:10px 2px 8px}
+  .offtbl{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .offtbl th,.offtbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+  .offtbl tr:last-child td{border-bottom:none}
+  .offtbl td.on{font-weight:800}
+  .rank{display:inline-block;min-width:20px;text-align:center;font-weight:800;color:#fff;background:var(--bad);border-radius:6px;font-size:11px;padding:1px 5px;margin-right:6px}
+  .drop{color:var(--bad);font-weight:800}
+  .rise{color:var(--good);font-weight:800}
+  .actwrap{margin-top:6px}
+  .actwrap label{font-size:11.5px;color:var(--muted);display:block;margin:2px 0}
+  .actwrap input{width:100%;font-family:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff}
+  .actwrap input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .toprow td{background:#fdecea55}
+  .tgtin{width:72px;font-family:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;
+    padding:6px 8px;text-align:left;font-variant-numeric:tabular-nums;background:#fffdf9}
+  .tgtin:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .tgtin::placeholder{color:#c3c7cf}
+
+  /* edit mode */
+  .editcell input{width:78px;font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;text-align:left;font-variant-numeric:tabular-nums}
+  .editcell input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .editbar{display:none;gap:8px;align-items:center;background:#fff7ef;border:1px solid var(--watch-line);border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--watch)}
+  .editbar.on{display:flex}
+
+  /* import panel */
+  .importbar{display:none;flex-direction:column;background:#fff;border:1px solid var(--line);
+    border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+  .importbar.on{display:flex}
+  .imphead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .imphead b{font-size:15px}
+  .impx{border:none;background:none;font-size:15px;color:var(--muted);padding:4px 8px}
+  .impx:hover{color:var(--ink)}
+  .impnote{font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.6}
+  .imparea{width:100%;min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12px;border:1.5px dashed var(--watch-line);border-radius:10px;padding:11px;
+    background:#fffaf6;resize:vertical;direction:ltr;text-align:left}
+  .imparea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);border-style:solid}
+  .imparea.drag{border-color:var(--accent);background:#fff3ea;border-style:solid}
+  .impactions{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .impstatus{font-size:12.5px;font-weight:700}
+  .impstatus.ok{color:var(--good)} .impstatus.err{color:var(--bad)}
+  .imppreview{margin-top:12px}
+  .imppreview:empty{display:none}
+  .impzone{font-size:13px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px}
+  .impzone h4{margin:0 0 6px;font-size:13.5px}
+  .impchg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+  .impchg b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .editfields{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .editfields label{font-size:12px;color:var(--muted)}
+  .editfields input{font-family:inherit;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px}
+
+  .legend{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow)}
+  .legend h3{font-size:13px;margin:0 0 9px;font-weight:800}
+  .legend .items{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12.5px;color:var(--muted)}
+  .legend .it{display:flex;align-items:center;gap:7px}
+  .sw{width:22px;height:14px;border-radius:5px;border:1px solid transparent;flex:none}
+  .sw.good{background:var(--good-bg);border-color:var(--good-line)}
+  .sw.bad{background:var(--bad-bg);border-color:var(--bad-line)}
+  .sw.strong{background:var(--bad-bg);border-color:var(--bad-line);box-shadow:inset 3px 0 0 var(--bad)}
+  .foot{margin-top:16px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.7}
+
+  /* ── Live sync bar ── */
+  .live-bar{
+    display:flex;align-items:center;gap:10px;
+    background:#fff;border:1px solid var(--line);border-radius:12px;
+    padding:9px 14px;margin-bottom:4px;font-size:12.5px;
+    box-shadow:var(--shadow);flex-wrap:wrap;
+  }
+  .live-dot{
+    width:9px;height:9px;border-radius:50%;background:var(--good);flex:none;
+    box-shadow:0 0 0 0 rgba(19,122,71,.4);
+  }
+  .live-dot.syncing{
+    background:var(--watch);
+    animation:livePulse 1s infinite;
+  }
+  .live-dot.ok{background:var(--good);}
+  .live-dot.err{background:var(--bad);animation:none;}
+  @keyframes livePulse{
+    0%{box-shadow:0 0 0 0 rgba(168,100,18,.5)}
+    70%{box-shadow:0 0 0 7px rgba(168,100,18,0)}
+    100%{box-shadow:0 0 0 0 rgba(168,100,18,0)}
+  }
+  .live-txt{flex:1;color:var(--muted)}
+  .live-txt b{color:var(--ink)}
+  .live-next{font-size:11.5px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .live-manual{font-size:12px;font-weight:700;color:var(--accent);background:none;border:none;
+    cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+  .live-manual:hover{color:#c43c00}
+  /* action log tab */
+  .logwrap{display:flex;flex-direction:column;gap:14px}
+  .logcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+  .logcard-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line);background:#fafbfc}
+  .logcard-head h3{margin:0;font-size:15px;font-weight:800}
+  .logentry{display:flex;gap:10px;padding:11px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+  .logentry:last-child{border-bottom:none}
+  .logentry .ldate{font-size:11.5px;color:var(--muted);white-space:nowrap;padding-top:2px;min-width:52px}
+  .logentry .loffice{font-size:12.5px;font-weight:800;color:var(--ink2);min-width:140px}
+  .logentry .laction{font-size:13px;flex:1;color:var(--ink)}
+  .logentry .lzone{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--flat-bg);color:var(--flat);font-weight:700;white-space:nowrap}
+  .logempty{padding:20px 16px;color:var(--muted);font-size:13px;text-align:center}
+  .aibox{background:#fff;border:1px solid var(--watch-line);border-radius:var(--r);padding:16px;margin-top:4px}
+  .aibox h3{margin:0 0 10px;font-size:14px;font-weight:800;color:var(--watch)}
+  .aibox .aibody{font-size:13px;line-height:1.7;color:var(--ink);white-space:pre-wrap}
+  .aibox .aifooter{margin-top:10px;font-size:11.5px;color:var(--muted)}
+  .ailoading{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:8px 0}
+  .pulse{animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @media (max-width:560px){
+    th,td{padding:10px 9px}
+    .offtbl th,.offtbl td{padding:7px 7px}
+    h1{font-size:18px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Rider Operations</h1>
+      <div class="sub">Last two days per zone — good or bad at a glance</div>
+    </div>
+    <div class="daterow" id="datepickers">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+        Day 1 (main):
+        <select id="pickToday" onchange="onDatePick()" style="font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;cursor:pointer">
+          <option value="">— sync first —</option>
+        </select>
+      </label>
+      <span style="color:var(--line)">vs</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+        Day 2 (compare):
+        <select id="pickPrev" onchange="onDatePick()" style="font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;cursor:pointer">
+          <option value="">— sync first —</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button id="syncBtn" class="primary" onclick="openSyncModal()">🔄 Sync from Google Sheets</button>
+    <button id="addZoneBtn" onclick="toggleAddZone()">➕ Add Zone</button>
+    <button id="importBtn" onclick="toggleImport()">⬆ Paste manually</button>
+    <button id="editBtn" onclick="toggleEdit()">✎ Edit numbers</button>
+    <button id="sheetCfgBtn" onclick="toggleSheetCfg()">⚙ Sheet URLs</button>
+    <button id="resetBtn" onclick="resetAll()">Reset</button>
+  </div>
+
+  <!-- Live sync status bar -->
+  <div class="live-bar" id="liveBar">
+    <span class="live-dot ok" id="liveDot"></span>
+    <span class="live-txt" id="liveTxt"><b>جاري الاتصال بالشيت…</b></span>
+    <span class="live-next" id="liveNext"></span>
+    <button class="live-manual" onclick="liveRefreshNow()">↻ الآن</button>
+  </div>
+
+  <!-- Apps Script URL Setup Modal -->
+  <div id="scriptSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:18px;padding:28px;width:min(580px,96vw);box-shadow:0 12px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:18px">⚙ إعداد الاتصال بالشيت</b>
+        <button onclick="closeScriptSetup()" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+
+      <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.9;color:#1e3a5f">
+        <b style="font-size:14px">⚡ خطوات إعداد الـ Apps Script (مرة واحدة بس):</b><br>
+        <b>1.</b> افتح الشيت → <b>Extensions → Apps Script</b><br>
+        <b>2.</b> امسح الكود الموجود والصق الكود من الملف <code style="background:#dbeafe;padding:1px 5px;border-radius:4px">RiderOpsProxy.gs</code><br>
+        <b>3.</b> غيّر <code style="background:#dbeafe;padding:1px 5px;border-radius:4px">SHEET_NAME</code> لاسم التاب بتاعك<br>
+        <b>4.</b> اضغط <b>Deploy → New deployment → Web app</b><br>
+        <b>5.</b> اختار <b>"Anyone"</b> في Execute as و Who has access<br>
+        <b>6.</b> انسخ الـ <b>Web app URL</b> والصقه هنا ↓
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted)">Apps Script Web App URL</label>
+        <input id="scriptUrlInput" type="url"
+          style="font-family:inherit;font-size:13px;border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;width:100%"
+          placeholder="https://script.google.com/macros/s/…/exec">
+      </div>
+
+      <div id="scriptSetupStatus" style="font-size:13px;font-weight:700;min-height:20px"></div>
+
+      <div style="display:flex;gap:8px">
+        <button onclick="saveAndTestScriptUrl()" class="primary" style="flex:1;font-family:inherit;font-size:14px;padding:11px">🔗 حفظ وتجربة</button>
+        <button onclick="closeScriptSetup()" style="font-family:inherit">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Sync Modal -->
+  <div id="syncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:18px;padding:28px;width:min(560px,96vw);box-shadow:0 12px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:17px">🔄 Sync from Google Sheets</b>
+        <button onclick="closeSyncModal()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+
+      <div style="background:var(--bg);border-radius:12px;padding:14px 16px;font-size:13px;color:var(--muted);line-height:1.7">
+        <b style="color:var(--ink)">كيف تشغّل الـ Sync:</b><br>
+        1. افتح الـ Google Sheet<br>
+        2. <b>File → Share → Publish to web</b><br>
+        3. اختار تاب <b>"Raw Data"</b> → format <b>CSV</b> → Publish<br>
+        4. انسخ الـ URL والصقه هنا<br>
+        <span style="color:#2563eb">أو: حط الـ URL العادي للشيت وسنحاول نقراه مباشرة</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted)">Sheet URL (published CSV or regular Google Sheets URL)</label>
+        <input id="syncUrlInput" type="url"
+          style="font-family:inherit;font-size:13px;border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;width:100%"
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          value="">
+      </div>
+
+      <div id="syncModalStatus" style="font-size:13px;font-weight:700;min-height:20px;color:var(--muted)"></div>
+
+      <div style="display:flex;gap:8px">
+        <button class="primary" onclick="runSyncFromUrl()" style="flex:1;font-family:inherit;font-size:14px;padding:11px">🔄 Sync Now</button>
+        <button onclick="closeSyncModal()" style="font-family:inherit">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Zone modal -->
+  <div id="addZoneModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:16px;padding:24px;width:min(520px,94vw);box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:16px">➕ Add New Zone</b>
+        <button class="impx" onclick="toggleAddZone()">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted)">Zone name *</label>
+        <input id="newZoneName" type="text" placeholder="e.g. Maadi, Nasr City…"
+          style="font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;width:100%">
+      </div>
+
+      <div style="display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;font-weight:700">
+        <button id="modeUrlBtn" onclick="setAddMode('url')"
+          style="flex:1;border:none;border-radius:0;padding:9px;background:var(--ink2);color:#fff;font-family:inherit;font-weight:700;cursor:pointer">🔗 Sheet URL</button>
+        <button id="modePasteBtn" onclick="setAddMode('paste')"
+          style="flex:1;border:none;border-radius:0;padding:9px;background:#fff;color:var(--muted);font-family:inherit;font-weight:700;cursor:pointer">📋 Paste data</button>
+      </div>
+
+      <div id="modeUrlPanel" style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted)">Google Sheets CSV URL</label>
+        <input id="newZoneUrl" type="url"
+          placeholder="https://docs.google.com/spreadsheets/d/…/pub?…&output=csv"
+          style="font-family:inherit;font-size:12.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;width:100%">
+        <span style="font-size:11.5px;color:var(--muted)">في Google Sheets: File → Share → Publish to web → اختار التاب → CSV → Publish → انسخ الـ URL</span>
+      </div>
+
+      <div id="modePastePanel" style="display:none;flex-direction:column;gap:5px">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted)">Paste data from the sheet</label>
+        <textarea id="newZonePaste" class="imparea" style="min-height:110px"
+          placeholder="افتح شيت الزون الجديدة → select كل الـ rows مع الـ header → Copy → Paste هنا"></textarea>
+        <span style="font-size:11.5px;color:var(--muted)">أول سطر لازم يكون: Zone, Date, # Orders, WH, Active Riders, …</span>
+      </div>
+
+      <div id="addZoneStatus" style="font-size:12.5px;font-weight:700;min-height:18px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="primary" onclick="confirmAddZone()" style="flex:1;font-family:inherit">✅ Add Zone</button>
+        <button onclick="toggleAddZone()" style="font-family:inherit">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet config panel — rendered dynamically by renderSheetCfg() -->
+  <div class="importbar" id="sheetCfgBar" style="gap:10px">
+    <div class="imphead">
+      <b>⚙ Google Sheets — Zone URLs</b>
+      <button class="impx" onclick="toggleSheetCfg()" aria-label="Close">✕</button>
+    </div>
+    <p class="impnote">
+      In Google Sheets: <b>File → Share → Publish to web</b> → choose the tab → format <b>CSV</b> → Publish → copy the URL.<br>
+      Add as many zones as you need. Each zone becomes its own tab in the dashboard.
+    </p>
+    <div id="zoneUrlList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button onclick="addZoneRow()" style="margin-top:4px;width:fit-content">+ Add zone</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <button class="primary" onclick="saveAndSync()">🔄 Save &amp; Sync</button>
+      <span id="cfgStatus" class="impstatus"></span>
+    </div>
+    <p class="impnote" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+      <b>Expected columns:</b> Zone, Date, # Orders, WH, Active Riders, UTR, On Time, DT, Accept Time, Transport Fail, Late Login, No Show, Break Hours.
+    </p>
+  </div>
+
+  <!-- Sync status bar -->
+  <div id="syncBar" style="display:none;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px">
+    <span id="syncSpinner" style="font-size:16px">⏳</span>
+    <span id="syncMsg" style="flex:1"></span>
+    <button onclick="document.getElementById('syncBar').style.display='none'">✕</button>
+  </div>
+
+  <div class="importbar" id="importBar">
+    <div class="imphead">
+      <b>Update numbers from the zone sheet</b>
+      <button class="impx" onclick="toggleImport()" aria-label="Close">✕</button>
+    </div>
+    <p class="impnote">Open any zone tab in the sheet (Mohandiseen / Hadayek el Qobba / Shobra), select the rows with their headers, copy them, and paste here. It picks up the latest two days automatically. You can paste all three zones together or one at a time. Or drag a CSV/text file and drop it in the box.</p>
+    <textarea id="impText" class="imparea" placeholder="Paste here… first row should be the headers: Zone, Date, # Orders, WH, Active Riders, …"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event)"></textarea>
+    <div class="impactions">
+      <button class="primary" onclick="runImport()">Preview update</button>
+      <button onclick="document.getElementById('impText').value='';document.getElementById('impStatus').textContent=''">Clear</button>
+      <span id="impStatus" class="impstatus"></span>
+    </div>
+    <div id="impPreview" class="imppreview"></div>
+  </div>
+
+  <div class="editbar" id="editBar">
+    <span>Edit mode is on — change the values directly in the table and everything recalculates.</span>
+  </div>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <div id="overview"></div>
+  <div id="zoneview" class="hidden"></div>
+  <div id="logview" class="hidden"></div>
+
+  <div class="legend">
+    <h3>How to read the colors</h3>
+    <div class="items">
+      <span class="it"><span class="sw good"></span> Green = improved (moved the right way for that metric)</span>
+      <span class="it"><span class="sw bad"></span> Red = dropped</span>
+      <span class="it"><span class="sw strong"></span> Side bar = strong move that needs attention</span>
+    </div>
+    <div class="items" style="margin-top:10px">
+      <span class="it"><span class="chip good" style="padding:3px 9px">OK ✓</span> 0 metrics dropped</span>
+      <span class="it"><span class="chip watch" style="padding:3px 9px">Watch</span> 1–2</span>
+      <span class="it"><span class="chip bad" style="padding:3px 9px">Needs action</span> 3 or more</span>
+    </div>
+  </div>
+
+  <div class="foot">
+    Source: the zone sheet (daily numbers) + the offices sheet "3PL WH" for drilling into a working-hours drop.<br>
+    At office level only working hours are available right now — the other metrics are still at zone level.
+  </div>
+</div>
+
+<script>
+/* ---------- polarity (agreed) ---------- */
+/* better:"high" = higher is better | "low" = lower is better */
+const META = [
+  {k:"working_hours", ar:"Working Hours",              better:"high", fmt:"int"},
+  {k:"active_riders", ar:"Active Riders",              better:"high", fmt:"int"},
+  {k:"orders",        ar:"Orders Completed",           better:"high", fmt:"int"},
+  {k:"on_time",       ar:"On-Time Delivery",           better:"high", fmt:"pct"},
+  {k:"utr",           ar:"UTR (orders/hour)",          better:"high", fmt:"d2"},
+  {k:"dt",            ar:"Delivery Time (min)",        better:"low",  fmt:"d1"},
+  {k:"accept_time",   ar:"Accepting Time (min)",       better:"low",  fmt:"d1"},
+  {k:"transport_fail",ar:"Transport Fail Rate",        better:"low",  fmt:"pct"},
+  {k:"late_login",    ar:"Late Login",                 better:"low",  fmt:"pct"},
+  {k:"no_show",       ar:"No Show",                    better:"low",  fmt:"pct"},
+  {k:"break_hours",   ar:"Break Hours",                better:"low",  fmt:"pct"},
+];
+
+/* ---------- real data [today=Jun 13, prev=Jun 12] ---------- */
+const ZONES = [
+  {id:"moh", name:"Mohandiseen", data:{
+    working_hours:[10211,9234], active_riders:[1499,1372], orders:[21653,21357],
+    on_time:[89.2,85.5], utr:[2.12,2.31], dt:[22.6,24.8], accept_time:[5.5,7.5],
+    transport_fail:[0.2,0.2], late_login:[3.0,3.5], no_show:[7.3,7.8], break_hours:[4.2,4.8]
+  }},
+  {id:"had", name:"Hadayek el Qobba", data:{
+    working_hours:[4304,4370], active_riders:[541,517], orders:[9367,9757],
+    on_time:[84.1,82.9], utr:[2.18,2.23], dt:[24.8,24.8], accept_time:[6.4,6.5],
+    transport_fail:[0.2,0.3], late_login:[8.4,6.0], no_show:[6.7,4.9], break_hours:[10.0,11.7]
+  }},
+  {id:"sho", name:"Shobra", data:{
+    working_hours:[2882,2634], active_riders:[465,423], orders:[5837,5857],
+    on_time:[79.8,79.2], utr:[2.03,2.22], dt:[26.3,27.5], accept_time:[7.6,8.6],
+    transport_fail:[0.3,0.4], late_login:[7.4,8.6], no_show:[9.69,9.75], break_hours:[10.9,12.0]
+  }},
+  {id:"oct", name:"October", data:{
+    working_hours:[9508,10343], active_riders:[1433,1510], orders:[20936,21200],
+    on_time:[80.4,73.2], utr:[2.03,2.20], dt:[27.4,31.0], accept_time:[5.6,8.7],
+    transport_fail:[0.2,0.3], late_login:[5.4,5.2], no_show:[2.4,3.0], break_hours:[10.7,12.4]
+  }},
+  {id:"zay", name:"Sheikh Zayed", data:{
+    working_hours:[9820,8702], active_riders:[901,860], orders:[18962,17837],
+    on_time:[85.1,79.7], utr:[1.94,2.06], dt:[26.1,29.5], accept_time:[5.1,8.3],
+    transport_fail:[0.1,0.2], late_login:[5.2,5.0], no_show:[1.6,4.6], break_hours:[10.6,13.7]
+  }},
+  {id:"pal", name:"October Palm Hills", data:{
+    working_hours:[2845,2692], active_riders:[296,293], orders:[5768,5493],
+    on_time:[68.7,65.5], utr:[2.03,1.97], dt:[34.7,38.6], accept_time:[8.8,10.7],
+    transport_fail:[0.5,0.4], late_login:[5.1,4.4], no_show:[4.4,4.7], break_hours:[11.0,9.4]
+  }},
+  {id:"wat", name:"October Wahat", data:{
+    working_hours:[2436,2318], active_riders:[229,226], orders:[4064,3940],
+    on_time:[61.4,59.6], utr:[1.69,1.73], dt:[34.3,36.5], accept_time:[7.7,9.6],
+    transport_fail:[0.5,0.4], late_login:[5.0,8.5], no_show:[3.1,3.7], break_hours:[10.0,10.7]
+  }},
+  {id:"smt", name:"Smart Village", data:{
+    working_hours:[350,394], active_riders:[35,37], orders:[847,826],
+    on_time:[81.7,75.7], utr:[2.55,2.61], dt:[28.6,30.0], accept_time:[9.5,8.9],
+    transport_fail:[0.1,0.1], late_login:[18.4,7.3], no_show:[5.4,7.9], break_hours:[3.2,4.2]
+  }},
+  {id:"ccc", name:"Cairo City Centre", data:{
+    working_hours:[0,0], active_riders:[0,0], orders:[0,0],
+    on_time:[0,0], utr:[0,0], dt:[0,0], accept_time:[0,0],
+    transport_fail:[0,0], late_login:[0,0], no_show:[0,0], break_hours:[0,0]
+  }},
+  {id:"giz", name:"Giza", data:{
+    working_hours:[0,0], active_riders:[0,0], orders:[0,0],
+    on_time:[0,0], utr:[0,0], dt:[0,0], accept_time:[0,0],
+    transport_fail:[0,0], late_login:[0,0], no_show:[0,0], break_hours:[0,0]
+  }},
+  {id:"hah", name:"Hadayek el Ahram", data:{
+    working_hours:[0,0], active_riders:[0,0], orders:[0,0],
+    on_time:[0,0], utr:[0,0], dt:[0,0], accept_time:[0,0],
+    transport_fail:[0,0], late_login:[0,0], no_show:[0,0], break_hours:[0,0]
+  }},
+];
+
+/* ---------- offices: working hours per office [Jun 13, Jun 12] ---------- */
+const OFFICES = {
+  had:[
+    ["MTA",448,550],["El Tohami",217,278],["El Abtal",221,240],["Top delivery",1479,1557],
+    ["BeCool",97,117],["Al Alamia",251,211],["Jasson",412,370],["Full Speed",324,310],
+    ["Speedo",135,129],["Stop Car",204,208],["Team mh for Delivery",219,190],
+    ["el Dawlya",150,97],["Ebad El rahman",78,49],["El Ezz",35,35],["Ready",28,29]
+  ],
+  moh:[
+    ["Team mh for Delivery",1385,1319],["Speedo",1143,963],["El Abtal",1020,905],
+    ["Al Alamia",934,863],["el Dawlya",882,802],["MTA",856,890],["Ebad El rahman",713,621],
+    ["El Tohami",602,487],["Jasson",554,425],["El Ezz",464,444],["Full Speed",415,463],
+    ["Top delivery",229,200],["Apache",207,142],["Tanta Car",190,194],["Ready",166,108],
+    ["Stop Car",111,108],["BeCool",103,119],["Super Speed",104,85],["Tanta",64,47],
+    ["Noot",41,56],["MR Delivery",27,21]
+  ],
+  sho:[
+    ["Al Alamia",602,546],["Team mh for Delivery",541,476],["MTA",409,370],["El Abtal",299,234],
+    ["el Dawlya",199,180],["Speedo",185,169],["Ebad El rahman",127,115],["El Tohami",108,146],
+    ["Full Speed",98,89],["Top delivery",75,107],["Jasson",60,69],["El Ezz",58,45],
+    ["Apache",47,32],["Ready",30,15],["Zagel",29,24],["Noot",13,17]
+  ],
+  oct:[
+    ["El Ezz",1555,1589],["MTA",1391,1443],["Team mh for Delivery",1274,1354],
+    ["Speedo",793,819],["El Tohami",606,638],["El Abtal",194,157],
+    ["Ebad El rahman",557,505],["Al Alamia",665,607],["Jasson",232,183],
+    ["Top delivery",252,243],["Bedaya",195,185],["Barg",196,176],
+    ["Tanta Car",149,115],["el Dawlya",207,222],["Noot",55,48],
+    ["MR Delivery",163,181],["Apache",180,117],["Full Speed",49,61],
+    ["Yalla fel Sekka",45,23],["Courier for delivery",12,12]
+  ],
+  zay:[
+    ["MTA",1338,1328],["Al Alamia",1412,1206],["Team mh for Delivery",1029,938],
+    ["El Ezz",1131,981],["Speedo",388,336],["MR Delivery",340,320],
+    ["Jasson",473,428],["El Abtal",224,247],["El Tohami",214,183],
+    ["Apache",447,315],["Courier for delivery",240,249],["Tanta Car",144,147],
+    ["Ebad El rahman",162,202],["Gearz",47,56],["Top delivery",210,204],
+    ["el Dawlya",139,108],["Bedaya",51,40],["Barg",18,13],["Noot",54,67],
+    ["Asphalt",35,26],["Yalla fel Sekka",379,302]
+  ],
+  pal:[
+    ["Yalla fel Sekka",334,297],["El Abtal",297,315],["El Ezz",303,205],
+    ["MR Delivery",128,135],["Bon Appetit",0,0],["Koffee Kulture",0,0],
+    ["Ebad El rahman",144,141],["Jasson",143,144],["Team mh for Delivery",164,140],
+    ["MTA",117,131],["Courier for delivery",81,88],["Apache",56,42],
+    ["Bedaya",122,165],["Top delivery",68,107],["el Dawlya",141,184]
+  ],
+  wat:[
+    ["El Ezz",673,714],["Top delivery",331,295],["Al Alamia",385,385],
+    ["MTА",152,159],["El Abtal",125,149],["Jasson",105,143],
+    ["Full Speed",108,79],["MR Delivery",109,104],["Team mh for Delivery",124,116],
+    ["Speedo",80,117],["Ebad El rahman",90,95],["El Tohami",69,85]
+  ],
+  smt:[
+    ["Al Alamia",81,92],["MTA",34,50],["Team mh for Delivery",38,43],
+    ["El Tohami",36,42],["el Dawlya",23,27],["El Ezz",26,29],
+    ["Ebad El rahman",32,35],["Speedo",11,22]
+  ]
+};
+
+/* ---------- fixed monthly target per office (normal target — June) ---------- */
+const TARGETS = {
+  had:{"Al Alamia":350,"BeCool":180,"Ebad El rahman":158,"El Abtal":320,"El Ezz":120,
+    "El Tohami":400,"Full Speed":430,"Jasson":450,"MTA":630,"Ready":100,"Speedo":250,
+    "Stop Car":290,"Team mh for Delivery":292,"Top delivery":1280,"el Dawlya":211,"Apache":0},
+  moh:{"Al Alamia":1100,"Apache":235,"BeCool":200,"Ebad El rahman":800,"El Abtal":1350,
+    "El Ezz":420,"El Tohami":790,"Full Speed":541,"Jasson":660,"MTA":1220,"Noot":30,
+    "Ready":150,"Speedo":1235,"Stop Car":150,"Super Speed":124,"Tanta":150,"Tanta Car":253,
+    "Team mh for Delivery":1368,"Top delivery":250,"el Dawlya":1300,"MR Delivery":0},
+  sho:{"Al Alamia":630,"Apache":70,"Ebad El rahman":200,"El Abtal":420,"El Ezz":120,
+    "El Tohami":200,"Full Speed":130,"Jasson":200,"MTA":420,"Ready":100,"Speedo":250,
+    "Team mh for Delivery":620,"Top delivery":150,"Zagel":30,"el Dawlya":220,"Noot":0},
+  oct:{"El Ezz":2000,"MTA":1700,"Team mh for Delivery":1500,"Speedo":1100,"El Tohami":700,
+    "El Abtal":400,"Ebad El rahman":750,"Al Alamia":1000,"Jasson":500,"Top delivery":400,
+    "Bedaya":330,"Barg":200,"Tanta Car":300,"el Dawlya":330,"Noot":30,
+    "MR Delivery":221,"Apache":250,"Full Speed":200},
+  zay:{"MTA":1800,"Al Alamia":1700,"Team mh for Delivery":1250,"El Ezz":1235,"Speedo":500,
+    "MR Delivery":500,"Jasson":500,"El Abtal":400,"El Tohami":350,"Apache":430,
+    "Courier for delivery":250,"Tanta Car":200,"Ebad El rahman":400,"Gearz":100,
+    "Top delivery":350,"el Dawlya":270,"Bedaya":100,"Noot":100,"Yalla fel Sekka":605},
+  pal:{"Yalla fel Sekka":650,"El Abtal":600,"El Ezz":530,"MR Delivery":200,
+    "Ebad El rahman":200,"Jasson":200,"Team mh for Delivery":250,"MTA":250,
+    "Courier for delivery":120,"Apache":100,"Bedaya":250,"Top delivery":150,"el Dawlya":400},
+  wat:{"El Ezz":1200,"Top delivery":400,"Al Alamia":530,"MTA":250,"El Abtal":350,
+    "Jasson":100,"Full Speed":200,"MR Delivery":200,"Team mh for Delivery":250,
+    "Speedo":150,"Ebad El rahman":200,"El Tohami":115},
+  smt:{"Al Alamia":94,"MTA":53,"Team mh for Delivery":40,"El Tohami":65,
+    "el Dawlya":40,"El Ezz":40,"Ebad El rahman":40,"Speedo":30}
+};
+
+/* ---------- sheet URL ---------- */
+const SYNC_URL_KEY = "tlbSyncUrl_v1";
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
+const DEFAULT_SYNC_URL = "https://script.google.com/a/macros/talabat.com/s/AKfycbztYkezIC3BasvoUHk7iDfQdRLnuMtBDUoZxFPNnmsoZhZ68Aq-gjGUXt9pAqL4wBMU/exec";
+let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
+
+/* جرب أكتر من طريقة للوصول للشيت */
+async function fetchSheetCSV() {
+  const encoded = encodeURIComponent(SHEET_CSV_URL);
+  const attempts = [
+    // 1. direct (بيشتغل لو الشيت published وفيه CORS header)
+    () => fetch(SHEET_CSV_URL, {cache:"no-store"}),
+    // 2. allorigins proxy
+    () => fetch("https://api.allorigins.win/raw?url=" + encoded, {cache:"no-store"}),
+    // 3. corsproxy.io
+    () => fetch("https://corsproxy.io/?" + encoded, {cache:"no-store"}),
+    // 4. custom script URL لو اتحفظ
+    () => AUTO_SYNC_URL && AUTO_SYNC_URL !== DEFAULT_SYNC_URL
+            ? fetch(AUTO_SYNC_URL, {cache:"no-store"})
+            : Promise.reject(new Error("no custom url")),
+  ];
+
+  for(const attempt of attempts){
+    try{
+      const resp = await attempt();
+      if(!resp || !resp.ok) continue;
+      const text = await resp.text();
+      if(text && text.length > 10 && !text.startsWith("ERROR:")) return text;
+    }catch(e){ continue; }
+  }
+  throw new Error("كل الطرق فشلت — تأكد إن الشيت published");
+}
+
+/* ---------- state ---------- */
+const STORE_KEY="tlbOpsState_v3";
+// sheetCache: {zid: [{date, vals}]}  — all rows from last sync, keyed by zone
+let sheetCache={};
+let state={labels:{today:"",prev:""}, edits:{}, actions:{}, targets:{}};
+let mem={};
+
+async function loadState(){
+  try{
+    let raw=null;
+    if(window.storage&&window.storage.get){const r=await window.storage.get(STORE_KEY);raw=r&&r.value;}
+    else if(window.localStorage){raw=window.localStorage.getItem(STORE_KEY);}
+    if(raw){const s=JSON.parse(raw);
+      state.labels=Object.assign(state.labels,s.labels||{});
+      state.edits=s.edits||{}; state.actions=s.actions||{}; state.targets=s.targets||{};
+      // sheetCache is NOT saved to storage (too large) — rebuilt on sync
+    }
+  }catch(e){}
+}
+async function saveState(){
+  // save state WITHOUT sheetCache — cache is rebuilt via sync
+  const payload=JSON.stringify({labels:state.labels, edits:state.edits, actions:state.actions, targets:state.targets});
+  try{
+    if(window.storage&&window.storage.set){await window.storage.set(STORE_KEY,payload);}
+    else if(window.localStorage){window.localStorage.setItem(STORE_KEY,payload);}
+  }catch(e){}
+}
+
+/* ---------- date dropdowns ---------- */
+
+/* seed sheetCache from the hardcoded ZONES data so dropdowns always have something */
+function seedCacheFromHardcoded(){
+  // use the two hardcoded dates as seeds — only if no real sync data exists for that zone
+  const d0="Jun 13", d1="Jun 12"; // matches the ZONES data arrays [0]=today [1]=prev
+  ZONES.forEach(z=>{
+    if(sheetCache[z.id]&&sheetCache[z.id].length>0) return; // already have real data
+    const r0={date:d0, vals:{}}, r1={date:d1, vals:{}};
+    META.forEach(m=>{
+      r0.vals[m.k]=z.data[m.k][0];
+      r1.vals[m.k]=z.data[m.k][1];
+    });
+    sheetCache[z.id]=[r1, r0]; // oldest first
+  });
+}
+
+function allDates(){
+  const seen=new Set();
+  Object.values(sheetCache).forEach(rows=>rows.forEach(r=>seen.add(r.date)));
+  return [...seen].sort((a,b)=>dateSort(b)-dateSort(a));
+}
+
+function dateSort(d){
+  const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const iso=d.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return parseInt(iso[1])*10000+parseInt(iso[2])*100+parseInt(iso[3]);
+  const m=d.match(/([a-z]+)\s*(\d+)/i);
+  if(m){ const mo=months[m[1].toLowerCase().slice(0,3)]||0; return mo*100+parseInt(m[2]); }
+  return 0;
+}
+
+function populateDateDropdowns(){
+  seedCacheFromHardcoded();
+  const dates=allDates();
+  const selT=document.getElementById("pickToday");
+  const selP=document.getElementById("pickPrev");
+  const curT=state.labels.today||dates[0]||"";
+  const curP=state.labels.prev||dates[1]||"";
+
+  [selT,selP].forEach(sel=>{
+    const cur=sel===selT?curT:curP;
+    sel.innerHTML="";
+    dates.forEach(d=>{
+      const o=document.createElement("option");
+      o.value=d; o.textContent=d;
+      if(d===cur) o.selected=true;
+      sel.appendChild(o);
+    });
+  });
+
+  // commit defaults to state if not set
+  if(!state.labels.today&&dates.length>0){state.labels.today=dates[0]; selT.value=dates[0];}
+  if(!state.labels.prev&&dates.length>1) {state.labels.prev=dates[1];  selP.value=dates[1];}
+}
+
+function onDatePick(){
+  state.labels.today=document.getElementById("pickToday").value;
+  state.labels.prev=document.getElementById("pickPrev").value;
+  // clear manual edits when date changes so we pull from sheetCache
+  state.edits={};
+  applySheetCacheToState();
+  saveState();
+  render();
+}
+
+/* apply the currently selected dates from sheetCache into state.edits */
+function applySheetCacheToState(){
+  seedCacheFromHardcoded();
+  const t=state.labels.today, p=state.labels.prev;
+  ZONES.forEach(z=>{
+    const rows=sheetCache[z.id]||[];
+    const rT=rows.find(r=>r.date===t);
+    const rP=rows.find(r=>r.date===p);
+    state.edits[z.id]={};
+    // seed from hardcoded only if it has real (non-zero) data
+    const hasHardcoded=z.data&&META.some(m=>z.data[m.k]&&(z.data[m.k][0]||z.data[m.k][1]));
+    if(hasHardcoded){
+      META.forEach(m=>{
+        const hd=z.data[m.k];
+        if(hd) state.edits[z.id][m.k]=[String(hd[0]),String(hd[1])];
+      });
+    }
+    // override with real sheet cache data
+    if(rT||rP){
+      META.forEach(m=>{
+        const vt=rT?rT.vals[m.k]:null;
+        const vp=rP?rP.vals[m.k]:null;
+        if(vt!=null||vp!=null)
+          state.edits[z.id][m.k]=[vt!=null?String(vt):null, vp!=null?String(vp):null];
+      });
+    }
+  });
+}
+
+/* actual value (with any edit applied) */
+function val(zid,k,idx){
+  const e=state.edits[zid]&&state.edits[zid][k];
+  if(e&&e[idx]!=null&&e[idx]!==""){const n=parseFloat(e[idx]);if(!isNaN(n))return n;}
+  const zone=ZONES.find(z=>z.id===zid);
+  if(zone&&zone.data&&zone.data[k]) return zone.data[k][idx]||0;
+  return 0;
+}
+
+function setLabel(which,v){
+  state.labels[which]=v;
+  saveState(); render();
+}
+
+/* ---------- formatting ---------- */
+function fmt(v,f){
+  if(v==null||isNaN(v))return "—";
+  if(f==="int")return Math.round(v).toLocaleString("en-US");
+  if(f==="d2")return v.toFixed(2);
+  if(f==="d1")return v.toFixed(1);
+  if(f==="pct")return v.toFixed(1)+"%";
+  return v;
+}
+function deltaTxt(d,f){
+  const s=d>0?"+":"";
+  if(f==="int")return s+Math.round(d).toLocaleString("en-US");
+  if(f==="d2")return s+d.toFixed(2);
+  if(f==="d1")return s+d.toFixed(1);
+  if(f==="pct")return s+d.toFixed(1)+"pp";
+  return s+d;
+}
+
+/* ---------- flag logic (polarity-aware) ---------- */
+function evalMetric(zid,m){
+  const t=val(zid,m.k,0), p=val(zid,m.k,1);
+  const d=t-p;
+  let status="flat";
+  const eps = (m.fmt==="d2")?0.001:(m.fmt==="int"?0.5:0.05);
+  if(Math.abs(d)>eps){
+    const up=d>0;
+    const good=(m.better==="high")?up:!up;
+    status=good?"good":"bad";
+  }
+  // move strength
+  let strong=false;
+  if(status==="bad"){
+    if(m.fmt==="pct") strong=Math.abs(d)>=2;        // >= 2 percentage points
+    else strong=(p!==0)&&(Math.abs(d)/Math.abs(p))>=0.05; // >= 5% relative
+  }
+  return {t,p,d,status,strong};
+}
+function zoneBadFlags(zid){
+  let bad=[];
+  META.forEach(m=>{const r=evalMetric(zid,m); if(r.status==="bad")bad.push({m,r});});
+  return bad;
+}
+function verdict(nBad){
+  if(nBad===0)return {cls:"good",txt:"OK ✓"};
+  if(nBad<=2)return {cls:"watch",txt:"Watch"};
+  return {cls:"bad",txt:"Needs action"};
+}
+
+/* ---------- render: overview ---------- */
+let editMode=false, curTab="overview";
+
+function renderTabs(){
+  const t=document.getElementById('tabs'); t.innerHTML='';
+  const mk=(id,label)=>{const b=document.createElement('button');b.className='tab'+(curTab===id?' active':'');
+    b.textContent=label;b.onclick=()=>{curTab=id;render();};return b;};
+  const totalActions=Object.values(state.actions).filter(v=>v&&v.trim()).length;
+  if(curTab!=='overview'&&curTab!=='log'){
+    // zone view: Overview tab + current zone name highlight
+    const back=mk('overview','Overview'); t.appendChild(back);
+    const zn=ZONES.find(x=>x.id===curTab);
+    if(zn){const sp=document.createElement('span');
+      sp.style.cssText='font-size:13px;font-weight:800;color:var(--ink);padding:9px 4px;margin-right:14px;border-bottom:3px solid var(--accent);display:inline-block';
+      sp.textContent=zn.name; t.appendChild(sp);}
+  } else {
+    t.appendChild(mk('overview','Overview'));
+  }
+  t.appendChild(mk('log','Action Log'+(totalActions>0?' ('+totalActions+')':'')));
+}
+
+function renderOverview(){
+  const ov=document.getElementById('overview');
+  let html='<div class="zmap">';
+  ZONES.forEach(function(z){
+    // skip zones with no data at all
+    const hasData=META.some(m=>{const r=evalMetric(z.id,m);return r.t>0||r.p>0;});
+    if(!hasData) return;
+
+    const bad=zoneBadFlags(z.id);
+    const v=verdict(bad.length);
+
+    // show only DROPPED metrics (bad status)
+    let kpis='';
+    bad.forEach(function(b){
+      const m=b.m, r=b.r;
+      const arr=r.d>0?'&#9650;':'&#9660;';
+      kpis+='<div class="zbox-kpi">'
+           +'<span class="klab">'+m.ar+'</span>'
+           +'<span class="kval bad">'+fmt(r.t,m.fmt)+'<span class="karr">'+arr+'</span></span>'
+           +'</div>';
+    });
+
+    const foot = bad.length===0
+      ? '<span class="zbox-issues ok">&#10003; All metrics on track</span>'
+      : '<span class="zbox-issues">&#9888; '+bad.length+' metric'+(bad.length>1?'s':'')+' dropped</span>';
+
+    if(bad.length===0){
+      kpis='<div style="font-size:12px;color:var(--good);font-weight:700;padding:8px 0">✓ All metrics on track</div>';
+    }
+
+    html+='<div class="zbox st-'+v.cls+'" data-goto="'+z.id+'">'
+        +'<div class="zbox-name">'+z.name+'</div>'
+        +'<span class="zbox-badge '+v.cls+'">'+v.txt+'</span>'
+        +'<div class="zbox-kpis">'+kpis+'</div>'
+        +'<div class="zbox-footer">'+foot+'<span class="zbox-tap">details &#8250;</span></div>'
+        +'</div>';
+  });
+  html+='</div>';
+  ov.innerHTML=html;
+}
+
+/* ---------- render: zone detail ---------- */
+function renderZone(zid){
+  const z=ZONES.find(x=>x.id===zid);
+  const zv=document.getElementById("zoneview");
+  const bad=zoneBadFlags(zid); const v=verdict(bad.length);
+  let rows="";
+  META.forEach(m=>{
+    const r=evalMetric(zid,m);
+    const isWH=m.k==="working_hours";
+    let dcls=r.status+(r.strong?" strong":"");
+    let arrow= r.d>0?"▲":(r.d<0?"▼":"–");
+    let todayCell, prevCell;
+    if(editMode){
+      todayCell=`<span class="editcell"><input type="text" value="${escapeAttr(rawEdit(zid,m.k,0,r.t))}" inputmode="decimal"
+        onchange="setEdit('${zid}','${m.k}',0,this.value)"></span>`;
+      prevCell=`<span class="editcell"><input type="text" value="${escapeAttr(rawEdit(zid,m.k,1,r.p))}" inputmode="decimal"
+        onchange="setEdit('${zid}','${m.k}',1,this.value)"></span>`;
+    }else{
+      todayCell=`<span class="num">${fmt(r.t,m.fmt)}</span>`;
+      prevCell=`<span class="num prev">${fmt(r.p,m.fmt)}</span>`;
+    }
+    rows+=`<tr class="${isWH?'whrow':''}">
+      <td class="metric">${m.ar}<small>${m.better==="high"?"higher is better":"lower is better"}</small></td>
+      <td>${todayCell}</td>
+      <td>${prevCell}</td>
+      <td><span class="delta ${dcls}"><span class="arrow">${arrow}</span>${deltaTxt(r.d,m.fmt)}</span>
+      ${isWH?whyButton(zid):""}</td>
+    </tr>`;
+    if(isWH){ rows+=`<tr id="offrow-${zid}" class="${''}"><td colspan="4" style="padding:0;border-bottom:1px solid var(--line)">
+        <div class="offwrap" id="offwrap-${zid}">${officesHTML(zid)}</div></td></tr>`; }
+  });
+  const zIdx=ZONES.findIndex(function(x){return x.id===zid;});
+  const prevZ=zIdx>0?ZONES[zIdx-1]:null;
+  const nextZ=zIdx<ZONES.length-1?ZONES[zIdx+1]:null;
+  const navBtns='<div class="znav">'
+    +(prevZ?'<button data-goto="'+prevZ.id+'" class="znavbtn">&#8249; '+prevZ.name+'</button>':'<button disabled style="opacity:.3">&#8249;</button>')
+    +(nextZ?'<button data-goto="'+nextZ.id+'" class="znavbtn">'+nextZ.name+' &#8250;</button>':'<button disabled style="opacity:.3">&#8250;</button>')
+    +'</div>';
+  zv.innerHTML=''
+    +'<div class="back-row">'
+    +'<button class="back-btn" data-goto="overview">&#8592; Overview</button>'
+    +navBtns
+    +'</div>'
+    +'<div class="panel">'
+    +'<div class="ptitle"><h2>'+z.name+'</h2><span class="chip '+v.cls+'">'+v.txt+'</span></div>'
+    +'<table><thead><tr><th>Metric</th><th>Day 1: '+(state.labels.today||'—')+'</th><th>Day 2: '+(state.labels.prev||'—')+'</th><th>Change</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>'
+    +'</div>';
+}
+
+function whyButton(zid){
+  return `<div class="why"><button class="whybtn" onclick="toggleOff('${zid}')">Why? / Offices ▾</button></div>`;
+}
+function toggleOff(zid){
+  const w=document.getElementById("offwrap-"+zid);
+  if(w) w.classList.toggle("open");
+}
+
+/* offices table for a zone, sorted by gap vs target (most under target first) */
+function officeTarget(zid,name){
+  const t=state.targets[zid+"|"+name];
+  if(t!=null&&t!==""){ const n=parseFloat(t); if(!isNaN(n))return n; }
+  const base=TARGETS[zid]&&TARGETS[zid][name];   // fixed monthly target
+  return (base==null)?null:base;
+}
+function officesHTML(zid){
+  // t = latest reviewed day's hours, p = the day before
+  const list=(OFFICES[zid]||[]).map(o=>{
+    const tgt=officeTarget(zid,o[0]);
+    const gap=(tgt!=null)?(o[1]-tgt):null;   // gap vs target (negative = under target)
+    return {name:o[0], t:o[1], p:o[2], dod:o[1]-o[2], tgt, gap};
+  });
+  // order: offices with a target and under it first (most under), then the rest
+  const withGap=list.filter(o=>o.gap!=null).sort((a,b)=>a.gap-b.gap);
+  const noGap =list.filter(o=>o.gap==null).sort((a,b)=>a.dod-b.dod);
+  const ordered=withGap.concat(noGap);
+  const under=withGap.filter(o=>o.gap<0);   // under target
+  const top3=under.slice(0,3);
+  const anyTarget=withGap.length>0;
+
+  let note;
+  if(!anyTarget){
+    note=`Enter each office's hours target in the "Target" column (or paste them) — and I'll surface the offices most under target and tell you who's behind the drop.`;
+  }else if(under.length===0){
+    note=`Every office with a target has met or beaten it — no office is under target in this zone.`;
+  }else{
+    const names=top3.map(o=>`${o.name} (${o.gap})`).join(", ");
+    note=`Top ${top3.length} offices under target: <b>${names}</b>. These are behind the hours shortfall — note the action taken next to each.`;
+  }
+
+  let rows="";
+  ordered.forEach((o)=>{
+    const isTop=top3.includes(o);
+    let rankBadge=""; if(isTop){const idx=top3.indexOf(o)+1; rankBadge=`<span class="rank">${idx}</span>`;}
+    const actKey=zid+"|"+o.name;
+    const actEntry=getActionDisplay(actKey);
+    const actVal=actEntry.text||"";
+    // target column = input field
+    const tgtCell=`<input class="tgtin" type="text" inputmode="decimal" placeholder="—"
+        value="${o.tgt!=null?escapeAttr(String(o.tgt)):''}"
+        onchange="setTarget('${escapeAttr(zid)}','${escapeAttr(o.name)}',this.value)">`;
+    // gap vs target column
+    let gapCell;
+    if(o.gap==null){ gapCell=`<span class="prev">—</span>`; }
+    else{ const gcls=o.gap<0?"drop":(o.gap>0?"rise":""); const gs=o.gap>0?"+":""; gapCell=`<span class="num ${gcls}">${gs}${o.gap}</span>`; }
+    // change vs yesterday (secondary)
+    const dcls=o.dod<0?"drop":(o.dod>0?"rise":""); const dsign=o.dod>0?"+":"";
+    rows+=`<tr class="${isTop?'toprow':''}">
+      <td class="on">${o.name}${rankBadge}</td>
+      <td class="num">${o.t.toLocaleString("en-US")}</td>
+      <td>${tgtCell}</td>
+      <td>${gapCell}</td>
+      <td class="num ${dcls}" style="color:var(--muted)">${dsign}${o.dod}</td>
+      <td><div class="actwrap"><input type="text" placeholder="Action taken…" value="${escapeAttr(actVal)}"
+         onchange="setAction('${escapeAttr(zid)}','${escapeAttr(o.name)}',this.value)"></div></td>
+    </tr>`;
+  });
+  return `<div class="offnote">${note}</div>
+    <table class="offtbl"><thead><tr>
+      <th>Office</th><th>Hours (${state.labels.today||"Day 1"})</th><th>Target</th><th>Gap vs target</th><th>Change vs Day 2</th><th>Action</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <div class="offnote" style="margin-top:8px">Sorted by gap vs target (most under target first). "Change vs yest." is for reference only. Targets are saved automatically.</div>`;
+}
+
+/* ---------- edits ---------- */
+function rawEdit(zid,k,idx,fallback){
+  const e=state.edits[zid]&&state.edits[zid][k];
+  if(e&&e[idx]!=null&&e[idx]!=="")return e[idx];
+  return fallback;
+}
+function setEdit(zid,k,idx,v){
+  state.edits[zid]=state.edits[zid]||{};
+  state.edits[zid][k]=state.edits[zid][k]||[null,null];
+  state.edits[zid][k][idx]=v;
+  saveState(); render();
+}
+const ACTIONS_KEY="tlbOpsActions_v1";
+
+async function loadSharedActions(){
+  try{
+    if(window.storage&&window.storage.get){
+      const r=await window.storage.get(ACTIONS_KEY,true); // shared=true
+      if(r&&r.value){
+        const a=JSON.parse(r.value);
+        // merge with local — shared wins for same key
+        state.actions=Object.assign({},state.actions,a);
+      }
+    }
+  }catch(e){}
+}
+
+async function setAction(zid,name,v){
+  const key=zid+"|"+name;
+  if(v&&v.trim()){
+    // always use TODAY's real date — not the dashboard's selected date
+    const realToday=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    const entry={text:v.trim(), date:realToday, ts:Date.now()};
+    state.actions[key]=JSON.stringify(entry);
+  } else {
+    delete state.actions[key];
+  }
+  await saveState();
+  // also save to shared storage
+  try{
+    if(window.storage&&window.storage.set){
+      await window.storage.set(ACTIONS_KEY,JSON.stringify(state.actions),true); // shared
+    }
+  }catch(e){}
+  if(curTab==="log") renderLog();
+}
+
+function getActionDisplay(key){
+  const raw=state.actions[key];
+  if(!raw) return {text:"",date:"",ts:0};
+  try{ return JSON.parse(raw); }catch(e){ return {text:raw,date:"",ts:0}; }
+}
+
+/* ---------- render: action log ---------- */
+let aiResult=null, aiLoading=false;
+
+function renderLog(){
+  const lv=document.getElementById("logview");
+
+  // collect all actions grouped by zone
+  const byZone={};
+  ZONES.forEach(z=>{ byZone[z.id]=[]; });
+  for(const [key,raw] of Object.entries(state.actions)){
+    if(!raw) continue;
+    const [zid,...rest]=key.split("|");
+    const officeName=rest.join("|");
+    if(!byZone[zid]) byZone[zid]=[];
+    const entry=getActionDisplay(key);
+    if(!entry.text) continue;
+    byZone[zid].push({office:officeName, ...entry, key});
+  }
+
+  // sort each zone by timestamp desc
+  Object.values(byZone).forEach(arr=>arr.sort((a,b)=>b.ts-a.ts));
+
+  const totalAll=Object.values(byZone).flat().length;
+
+  let html=`<div class="logwrap">`;
+
+  // AI recommendations box — removed per user request
+
+  if(totalAll===0){
+    html+=`<div class="logcard"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / Offices ▾" and type an action next to an office.</div></div>`;
+  } else {
+    ZONES.forEach(z=>{
+      const entries=byZone[z.id];
+      if(entries.length===0) return;
+      html+=`<div class="logcard">
+        <div class="logcard-head"><h3>${z.name}</h3><span class="chip watch">${entries.length} action${entries.length!==1?"s":""}</span></div>`;
+      entries.forEach(e=>{
+        html+=`<div class="logentry">
+          <span class="ldate">${e.date||"—"}</span>
+          <span class="loffice">${escapeHtml(e.office)}</span>
+          <span class="laction">${escapeHtml(e.text)}</span>
+          <button style="font-size:11px;padding:3px 8px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)" onclick="clearAction('${escapeAttr(e.key)}')">✕</button>
+        </div>`;
+      });
+      html+=`</div>`;
+    });
+  }
+
+  html+=`</div>`;
+  lv.innerHTML=html;
+}
+
+function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+async function clearAction(key){
+  if(!confirm("Remove this action?")) return;
+  delete state.actions[key];
+  await saveState();
+  try{
+    if(window.storage&&window.storage.set){
+      await window.storage.set(ACTIONS_KEY,JSON.stringify(state.actions),true);
+    }
+  }catch(e){}
+  aiResult=null;
+  renderLog();
+  renderTabs();
+}
+
+async function runAIAnalysis(){
+  const entries=[];
+  for(const [key,raw] of Object.entries(state.actions)){
+    if(!raw) continue;
+    const [zid,...rest]=key.split("|");
+    const zone=ZONES.find(z=>z.id===zid)?.name||zid;
+    const e=getActionDisplay(key);
+    if(e.text) entries.push({zone, office:rest.join("|"), date:e.date, action:e.text});
+  }
+  if(entries.length===0) return;
+
+  aiLoading=true; aiResult=null; renderLog();
+
+  // build prompt
+  const lines=entries.map(e=>`- [${e.zone}] ${e.office} (${e.date||"recent"}): ${e.action}`).join("\n");
+  const prompt=`You are a rider operations analyst. Below are actions taken by the ops team for each delivery office across 3 zones (Mohandiseen, Hadayek el Qobba, Shobra) in Cairo.
+
+Actions logged:
+${lines}
+
+Based on these actions:
+1. Identify which offices may need a follow-up check and why
+2. Flag any patterns across offices or zones (e.g. recurring issues)
+3. Give 3–5 concrete next-step recommendations the team should take in the next 24–48 hours
+
+Be concise and direct. Format with clear numbered sections.`;
+
+  try{
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:1000,
+        messages:[{role:"user",content:prompt}]
+      })
+    });
+    const data=await resp.json();
+    aiResult=data.content?.[0]?.text||"No response received.";
+  }catch(e){
+    aiResult="Error: "+e.message;
+  }
+  aiLoading=false;
+  renderLog();
+}
+function setTarget(zid,name,v){
+  state.targets[zid+"|"+name]=v; saveState();
+  if(curTab!=="overview") renderZone(curTab);
+}
+function setLabel(which,v){
+  state.labels[which]=v;
+  saveState(); render();
+}
+function toggleEdit(){
+  editMode=!editMode;
+  document.getElementById("editBtn").classList.toggle("on",editMode);
+  document.getElementById("editBar").classList.toggle("on",editMode);
+  render();
+}
+async function resetAll(){
+  if(!confirm("This resets all data including synced numbers. OK?"))return;
+  sheetCache={};
+  state={labels:{today:"",prev:""},edits:{},actions:{},targets:{}};
+  mem={};
+  try{
+    if(window.storage&&window.storage.delete){await window.storage.delete(STORE_KEY);}
+    else if(window.localStorage){window.localStorage.removeItem(STORE_KEY);}
+  }catch(e){}
+  populateDateDropdowns();
+  render();
+}
+
+function escapeAttr(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;");}
+
+/* ---------- import from sheet (paste/drag) ---------- */
+let importOpen=false, pendingImport=null;
+function toggleImport(){
+  importOpen=!importOpen;
+  document.getElementById("importBtn").classList.toggle("on",importOpen);
+  document.getElementById("importBar").classList.toggle("on",importOpen);
+}
+function handleDrop(e){
+  e.preventDefault(); const ta=e.target; ta.classList.remove("drag");
+  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f){ const rd=new FileReader(); rd.onload=()=>{ta.value=rd.result;}; rd.readAsText(f); }
+  else { const t=e.dataTransfer.getData("text"); if(t)ta.value=t; }
+}
+
+/* zone name → id */
+function zoneIdFromName(s){
+  const t=(s||"").trim().toLowerCase().replace(/_/g," ");
+  if(!t) return null;
+  if(t.includes("mohand")||t.includes("u0645u0647u0646u062fu0633")) return "moh";
+  if(t.includes("ahram")) return "hah";
+  if(t.includes("hadayek")||t.includes("qobba")||t.includes("u0642u0628u0629")) return "had";
+  if(t.includes("shobra")||t.includes("u0634u0628u0631u0627")) return "sho";
+  if(t.includes("cairo city")||t.includes("city centre")) return "ccc";
+  if(t==="giza"||t.includes("giza")) return "giz";
+  if(t.includes("palm")) return "pal";
+  if(t.includes("wahat")) return "wat";
+  if(t==="october"||t==="oct") return "oct";
+  if(t.includes("sheikh zayed")||t==="zayed"||t==="zay") return "zay";
+  if(t.includes("smart")) return "smt";
+  if(t.includes("october")||t.includes("6th")) return "oct";
+  return null;
+}
+/* column header → metric key — supports actual sheet column names */
+function colKey(h){
+  const t=(h||"").trim().toLowerCase().replace(/\s+/g," ").replace(/^[#%]\s*/,"");
+  // Orders
+  if(/orders completed|# orders|^orders$/.test(t)) return "orders";
+  // Working Hours
+  if(/^wh$|^# working hours|^working hours|^actual working hours|^avg wh/.test(t)) return "working_hours";
+  // Active Riders
+  if(/active rider|total active rider/.test(t)) return "active_riders";
+  // UTR
+  if(/^utr/.test(t)) return "utr";
+  // On Time
+  if(/on.?time|order on time/.test(t)) return "on_time";
+  // Delivery Time
+  if(/^dt\b|^dt \(min|delivery time/.test(t)) return "dt";
+  // Accepting / Acceptance Time
+  if(/rider accepting time|accepting time|acceptance rate/.test(t)) return "accept_time";
+  // Transport Fail
+  if(/transport fail/.test(t)) return "transport_fail";
+  // Fail Rate (general)
+  if(/^fail rate$/.test(t)) return "transport_fail";
+  // Late Login
+  if(/late.?login/.test(t)) return "late_login";
+  // No Show
+  if(/no.?show/.test(t)) return "no_show";
+  // Break Hours
+  if(/break/.test(t)) return "break_hours";
+  return null;
+}
+
+/* detect date column — supports "Date", "Report Date", "report date", etc. */
+function isDateColHeader(h){
+  const t=(h||"").trim().toLowerCase();
+  return t==="date"||t==="report date"||t.endsWith("date")||t.includes("تاريخ");
+}
+
+/* detect zone column */
+function isZoneColHeader(h){
+  const t=(h||"").trim().toLowerCase();
+  return t==="zone"||t==="zone name"||t.startsWith("zone");
+}
+function splitLine(line){
+  // CSV with quote support "1,234"
+  const out=[]; let cur="",q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];
+    if(c==='"'){ if(q&&line[i+1]==='"'){cur+='"';i++;} else q=!q; }
+    else if((c===','||c==='\t')&&!q){ out.push(cur); cur=""; }
+    else cur+=c;
+  }
+  out.push(cur); return out;
+}
+function num(s){ if(s==null)return null; const v=parseFloat(String(s).replace(/[, %]/g,"")); return isNaN(v)?null:v; }
+function isDateCell(s){
+  if(!s) return false;
+  const t=String(s).trim();
+  // ISO: 2025-06-13
+  if(/^\d{4}-\d{2}-\d{2}/.test(t)) return true;
+  // DD/MM/YYYY or MM/DD/YYYY: 13/6/2025 or 6/13/2025
+  if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(t)) return true;
+  // "Jun 13" or "13 Jun" or "Jun 13, 2025"
+  if(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(t)) return true;
+  // Arabic month names
+  if(/يناير|فبراير|مارس|إبريل|ابريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر/.test(t)) return true;
+  // Excel serial number (large number like 45000+)
+  if(/^\d{5}$/.test(t.trim())) return true;
+  return false;
+}
+
+function normalizeDate(s){
+  // convert any date format to a clean display string
+  const t=String(s).trim();
+  // Excel serial → JS date
+  if(/^\d{5}$/.test(t)){
+    const d=new Date((parseInt(t)-25569)*86400000);
+    return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  }
+  // ISO 2025-06-13 → Jun 13
+  const iso=t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso){
+    const d=new Date(parseInt(iso[1]),parseInt(iso[2])-1,parseInt(iso[3]));
+    return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  }
+  // DD/MM/YYYY
+  const dmy=t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if(dmy){
+    const yr=dmy[3].length===2?"20"+dmy[3]:dmy[3];
+    const d=new Date(parseInt(yr),parseInt(dmy[2])-1,parseInt(dmy[1]));
+    if(!isNaN(d)) return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  }
+  return t; // keep as-is if nothing matches
+}
+
+/* parse a zone CSV and return ALL data rows [{date, vals}] or null */
+function parseZoneCSV(csvText, zoneId){
+  const lines=csvText.split(/\r?\n/).filter(l=>l.trim()!=="");
+  if(lines.length<2) return null;
+
+  let headerIdx=-1, hmap={}, zoneCol=-1, dateCol=-1;
+  for(let i=0;i<Math.min(lines.length,15);i++){
+    const cells=splitLine(lines[i]);
+    const low=cells.map(c=>(c||"").trim().toLowerCase());
+    const hasDate=low.some(c=>isDateColHeader(c)||c==="week");
+    const hasMetric=low.some(c=>colKey(c)!==null);
+    if(hasDate||hasMetric){
+      headerIdx=i; hmap={}; zoneCol=-1; dateCol=-1;
+      cells.forEach((h,j)=>{
+        if(isZoneColHeader(h)){zoneCol=j;return;}
+        if(isDateColHeader(h)||h.trim().toLowerCase()==="week"){dateCol=j;return;}
+        const k=colKey(h); if(k&&!(k in hmap))hmap[k]=j;
+      });
+      if(Object.keys(hmap).length>=1) break;
+    }
+  }
+  if(headerIdx<0||Object.keys(hmap).length<1) return null;
+
+  const rows=[];
+  for(let i=headerIdx+1;i<lines.length;i++){
+    const cells=splitLine(lines[i]);
+    const dcellRaw=dateCol>=0?(cells[dateCol]||""):"";
+    if(!dcellRaw||!isDateCell(dcellRaw)) continue;
+    // zone filter — only skip if zone col exists AND it clearly belongs to a different known zone
+    if(zoneCol>=0){
+      const zname=(cells[zoneCol]||"").trim();
+      const mappedId=zoneIdFromName(zname);
+      // if it maps to a known hardcoded zone and it's not this zone, skip
+      if(zname&&mappedId&&mappedId!==zoneId&&["moh","had","sho","oct","zay","pal","wat","smt","ccc","giz","hah"].includes(mappedId)) continue;
+    }
+    const vals={};
+    for(const k in hmap){const v=num(cells[hmap[k]]);if(v!=null)vals[k]=v;}
+    if(Object.keys(vals).length<1) continue;
+    rows.push({date:normalizeDate(dcellRaw), vals});
+  }
+  return rows.length>0 ? rows : null;
+}
+function parsePaste(text){
+  const lines=text.split(/\r?\n/).map(l=>l).filter(l=>l.trim()!=="");
+  let hmap=null, zoneCol=-1, dateCol=-1;
+  const byZone={};
+  for(const raw of lines){
+    const cells=splitLine(raw);
+    // header row detection
+    const hasZone=cells.some(c=>isZoneColHeader(c));
+    const hasDate=cells.some(c=>isDateColHeader(c));
+    const hasMetric=cells.some(c=>colKey(c)!==null);
+    if((hasZone||hasDate)&&hasMetric){
+      hmap={}; zoneCol=-1; dateCol=-1;
+      cells.forEach((h,i)=>{
+        if(isZoneColHeader(h)){zoneCol=i;return;}
+        if(isDateColHeader(h)){dateCol=i;return;}
+        const k=colKey(h); if(k&&!(k in hmap))hmap[k]=i;
+      });
+      continue;
+    }
+    if(!hmap) continue;
+    const zname=zoneCol>=0?cells[zoneCol]:"";
+    const zid=zoneIdFromName(zname)||("z"+Object.keys(byZone).length);
+    const dcell=dateCol>=0?(cells[dateCol]||""):"";
+    if(!isDateCell(dcell)) continue;
+    const vals={};
+    for(const k in hmap){const v=num(cells[hmap[k]]);if(v!=null)vals[k]=v;}
+    if(Object.keys(vals).length<1) continue;
+    (byZone[zid]=byZone[zid]||[]).push({date:normalizeDate(dcell),vals});
+  }
+  const result={};
+  for(const zid in byZone){
+    const rows=byZone[zid];
+    if(rows.length<1) continue;
+    const prev=rows[rows.length-2]||rows[0], today=rows[rows.length-1];
+    result[zid]={today,prev};
+  }
+  return result;
+}
+function runImport(){
+  const txt=document.getElementById("impText").value;
+  const st=document.getElementById("impStatus");
+  const pv=document.getElementById("impPreview");
+  if(!txt.trim()){ st.className="impstatus err"; st.textContent="Paste the numbers first."; pv.innerHTML=""; return; }
+  let parsed;
+  try{ parsed=parsePaste(txt); }catch(e){ parsed={}; }
+  const zids=Object.keys(parsed);
+  if(zids.length===0){
+    st.className="impstatus err";
+    st.textContent="Couldn't read the data. Make sure the first row has the headers and includes a Zone and Date column.";
+    pv.innerHTML=""; pendingImport=null; return;
+  }
+  pendingImport=parsed;
+  // change preview
+  let html="";
+  zids.forEach(zid=>{
+    const z=ZONES.find(x=>x.id===zid); const {today,prev}=parsed[zid];
+    let chips="";
+    META.forEach(m=>{
+      if(today.vals[m.k]==null&&prev.vals[m.k]==null) return;
+      const nt=today.vals[m.k], np=prev.vals[m.k];
+      chips+=`<span>${m.ar}: <b>${nt!=null?fmt(nt,m.fmt):"—"}</b> / <b>${np!=null?fmt(np,m.fmt):"—"}</b></span>`;
+    });
+    html+=`<div class="impzone"><h4>${z?z.name:zid}</h4>
+      <div class="impchg">${chips||"No metrics read"}</div>
+      <div class="impchg" style="margin-top:6px"><span>Today: <b>${escapeAttr(today.date)}</b></span><span>Yesterday: <b>${escapeAttr(prev.date)}</b></span></div></div>`;
+  });
+  st.className="impstatus ok"; st.textContent=`Read ${zids.length} zone${zids.length>1?"s":""}. Review, then confirm.`;
+  pv.innerHTML=html+`<div style="margin-top:12px"><button class="primary" onclick="applyImport()">Confirm and update</button></div>`;
+}
+
+function applyImport(){
+  if(!pendingImport) return;
+  for(const zid in pendingImport){
+    const {today,prev}=pendingImport[zid];
+    state.edits[zid]=state.edits[zid]||{};
+    META.forEach(m=>{
+      const nt=today.vals[m.k], np=prev.vals[m.k];
+      if(nt==null&&np==null) return;
+      state.edits[zid][m.k]=[ nt!=null?String(nt):null, np!=null?String(np):null ];
+    });
+  }
+  saveState();
+  document.getElementById("impStatus").className="impstatus ok";
+  document.getElementById("impStatus").textContent="Updated ✓";
+  pendingImport=null;
+  toggleImport();
+  render();
+}
+
+/* ---------- sheet URLs — dynamic zone list ---------- */
+const URL_KEY="tlbSheetUrls_v2";
+// zones list: [{id, name, url}]  — id is auto-generated slug
+let zoneList=[]; // dynamic zones loaded from storage
+let sheetCfgOpen=false;
+
+/* generate a slug id from zone name */
+function slugify(name){
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").substring(0,20)||("zone-"+Date.now());
+}
+
+/* all zones = hardcoded 8 + any dynamic ones */
+function allZones(){
+  // merge: hardcoded zones stay as base; dynamic list overrides/extends
+  const hardcodedIds=new Set(["moh","had","sho","oct","zay","pal","wat","smt","ccc","giz","hah"]);
+  const extra=zoneList.filter(z=>!hardcodedIds.has(z.id));
+  return [...ZONES.map(z=>({id:z.id, name:z.name})), ...extra];
+}
+
+async function loadSheetUrls(){
+  try{
+    let raw=null;
+    if(window.storage&&window.storage.get){const r=await window.storage.get(URL_KEY);raw=r&&r.value;}
+    else if(window.localStorage){raw=window.localStorage.getItem(URL_KEY);}
+    if(raw){
+      const s=JSON.parse(raw);
+      zoneList=s.zones||[];
+      // backwards compat: migrate old {moh,had,sho} keys
+      if(!zoneList.length&&(s.moh||s.had||s.sho)){
+        if(s.moh) zoneList.push({id:"moh",name:"Mohandiseen",url:s.moh});
+        if(s.had) zoneList.push({id:"had",name:"Hadayek el Qobba",url:s.had});
+        if(s.sho) zoneList.push({id:"sho",name:"Shobra",url:s.sho});
+      }
+    }
+  }catch(e){}
+  // ensure the 8 hardcoded zones always exist in zoneList (with empty url if not set)
+  const coreZones=[
+    {id:"moh",name:"Mohandiseen"},{id:"had",name:"Hadayek el Qobba"},{id:"sho",name:"Shobra"},
+    {id:"oct",name:"October"},{id:"zay",name:"Sheikh Zayed"},{id:"pal",name:"October Palm Hills"},
+    {id:"wat",name:"October Wahat"},{id:"smt",name:"Smart Village"},
+    {id:"ccc",name:"Cairo City Centre"},{id:"giz",name:"Giza"},{id:"hah",name:"Hadayek el Ahram"}
+  ];
+  coreZones.forEach(({id,name})=>{
+    if(!zoneList.find(z=>z.id===id)) zoneList.push({id,name,url:""});
+  });
+  renderSheetCfg();
+}
+
+async function saveSheetUrls(){
+  // read current values from the rendered rows
+  const rows=document.querySelectorAll(".zone-url-row");
+  zoneList=[];
+  rows.forEach(row=>{
+    const name=(row.querySelector(".zname-input").value||"").trim();
+    const url=(row.querySelector(".zurl-input").value||"").trim();
+    const id=row.dataset.zid;
+    if(name) zoneList.push({id,name,url});
+  });
+  const payload=JSON.stringify({zones:zoneList});
+  try{
+    if(window.storage&&window.storage.set){await window.storage.set(URL_KEY,payload);}
+    else if(window.localStorage){window.localStorage.setItem(URL_KEY,payload);}
+  }catch(e){}
+}
+
+function renderSheetCfg(){
+  const list=document.getElementById("zoneUrlList");
+  if(!list) return;
+  list.innerHTML="";
+  zoneList.forEach((z,i)=>{
+    const isCore=["moh","had","sho","oct","zay","pal","wat","smt","ccc","giz","hah"].includes(z.id);
+    const row=document.createElement("div");
+    row.className="zone-url-row";
+    row.dataset.zid=z.id;
+    row.style.cssText="display:grid;grid-template-columns:160px 1fr auto;gap:8px;align-items:start";
+    row.innerHTML=`
+      <div>
+        <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:3px">Zone name</div>
+        <input class="zname-input" type="text" value="${escapeAttr(z.name)}"
+          style="width:100%;font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:7px 9px"
+          placeholder="Zone name" ${isCore?"readonly style='background:#f7f7f7;width:100%;font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:7px 9px'":""}>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:3px">Google Sheets CSV URL</div>
+        <input class="zurl-input" type="url" value="${escapeAttr(z.url||"")}"
+          style="width:100%;font-family:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:7px 9px"
+          placeholder="https://docs.google.com/spreadsheets/d/…/pub?…&output=csv">
+      </div>
+      <div style="padding-top:20px">
+        ${isCore
+          ? `<span style="font-size:11px;color:var(--muted);padding:7px 4px">core</span>`
+          : `<button onclick="removeZoneRow(this)" style="color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);padding:7px 10px">✕</button>`
+        }
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function addZoneRow(){
+  const newId="zone-"+Date.now();
+  zoneList.push({id:newId,name:"",url:""});
+  renderSheetCfg();
+  // focus the new name input
+  const rows=document.querySelectorAll(".zone-url-row");
+  const last=rows[rows.length-1];
+  last?.querySelector(".zname-input")?.focus();
+}
+
+function removeZoneRow(btn){
+  const row=btn.closest(".zone-url-row");
+  const zid=row.dataset.zid;
+  zoneList=zoneList.filter(z=>z.id!==zid);
+  // clear cache for removed zone
+  delete sheetCache[zid];
+  renderSheetCfg();
+}
+
+async function saveAndSync(){
+  await saveSheetUrls();
+  syncFromSheets();
+}
+
+function toggleSheetCfg(){
+  sheetCfgOpen=!sheetCfgOpen;
+  document.getElementById("sheetCfgBar").classList.toggle("on",sheetCfgOpen);
+  document.getElementById("sheetCfgBtn").classList.toggle("on",sheetCfgOpen);
+  if(sheetCfgOpen) renderSheetCfg();
+}
+
+/* ---------- Quick Sync Modal ---------- */
+let savedSyncUrl="";
+function openSyncModal(){
+  document.getElementById("syncModal").style.display="flex";
+  // pre-fill with saved URL
+  const inp=document.getElementById("syncUrlInput");
+  if(savedSyncUrl) inp.value=savedSyncUrl;
+  document.getElementById("syncModalStatus").textContent="";
+  setTimeout(()=>inp.focus(),50);
+}
+function closeSyncModal(){
+  document.getElementById("syncModal").style.display="none";
+}
+
+/* Convert any Google Sheets URL to a CSV export URL for "Raw Data" tab
+   Supports: /edit, /pub, already-csv, or Apps Script URLs */
+function toCSVUrl(rawUrl){
+  const u=rawUrl.trim();
+  // Already a CSV export URL
+  if(u.includes("output=csv")) return u;
+  // Apps Script / web app
+  if(u.includes("script.google.com")) return u;
+  // Regular sheet URL — extract spreadsheet ID and convert
+  const m=u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if(m){
+    const id=m[1];
+    // Try to get "Raw Data" tab — gid 0 is default; we'll try without gid first to get all data
+    return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=Raw%20Data`;
+  }
+  return u; // return as-is and let fetch fail naturally
+}
+
+async function runSyncFromUrl(){
+  const rawUrl=document.getElementById("syncUrlInput").value.trim();
+  const st=document.getElementById("syncModalStatus");
+  if(!rawUrl){st.style.color="var(--bad)";st.textContent="❌ حط الـ URL الأول.";return;}
+
+  savedSyncUrl=rawUrl;
+  st.style.color="var(--muted)"; st.textContent="⏳ بيتحمل الداتا…";
+  document.getElementById("syncBtn").textContent="⏳ جاري الـ Sync…";
+  document.getElementById("syncBtn").disabled=true;
+
+  try{
+    const csvUrl=toCSVUrl(rawUrl);
+    const csv=await fetchCSV(csvUrl);
+
+    // Parse ALL zones from the single CSV
+    const result=parseAllZonesFromCSV(csv);
+    const zids=Object.keys(result);
+
+    if(zids.length===0){
+      st.style.color="var(--bad)";
+      st.textContent="❌ مش لاقي داتا — تأكد إن الشيت published وفيه Zone + Date columns.";
+      return;
+    }
+
+    // Update sheetCache for all found zones
+    let newZones=0;
+    for(const zid of zids){
+      sheetCache[zid]=result[zid];
+      // ensure zone exists in ZONES array
+      if(!ZONES.find(z=>z.id===zid)){
+        const knownName=knownZoneName(zid);
+        ZONES.push({id:zid, name:knownName||zid, data:emptyZoneData()});
+        newZones++;
+      }
+    }
+
+    // Refresh dates and state
+    seedCacheFromHardcoded();
+    populateDateDropdowns();
+    const dates=allDates();
+    if(!dates.includes(state.labels.today)){
+      state.labels.today=dates[0]||"";
+      const pt=document.getElementById("pickToday"); if(pt)pt.value=state.labels.today;
+    }
+    if(!dates.includes(state.labels.prev)){
+      state.labels.prev=dates[1]||dates[0]||"";
+      const pp=document.getElementById("pickPrev"); if(pp)pp.value=state.labels.prev;
+    }
+    state.edits={};
+    applySheetCacheToState();
+    await saveState();
+    render();
+
+    st.style.color="var(--good)";
+    st.textContent=`✅ تم! ${zids.length} زون — ${dates.length} يوم متاح.${newZones>0?" ("+newZones+" زون جديد)":""}`;
+    setTimeout(()=>closeSyncModal(),2000);
+
+  }catch(e){
+    st.style.color="var(--bad)";
+    st.textContent="❌ فشل: "+e.message+". جرب File → Publish to web → Raw Data → CSV.";
+  }finally{
+    document.getElementById("syncBtn").textContent="🔄 Sync from Google Sheets";
+    document.getElementById("syncBtn").disabled=false;
+  }
+}
+
+/* Parse ALL zones from a single CSV that has a Zone column */
+function parseAllZonesFromCSV(csvText){
+  const lines=csvText.split(/\r?\n/).filter(l=>l.trim()&&splitLine(l).some(c=>c.trim()));
+  if(lines.length<2) return {};
+
+  // Find header row
+  let headerIdx=-1, hmap={}, zoneCol=-1, dateCol=-1;
+  for(let i=0;i<Math.min(lines.length,10);i++){
+    const cells=splitLine(lines[i]);
+    const low=cells.map(c=>(c||"").trim().toLowerCase());
+    const hasDate=low.some(c=>c==="date"||c==="report date"||c.endsWith("date"));
+    const hasZone=low.some(c=>c==="zone"||c==="zone name");
+    const hasMetric=low.some(c=>colKey(c)!==null);
+    if((hasDate||hasZone)&&hasMetric){
+      headerIdx=i; hmap={}; zoneCol=-1; dateCol=-1;
+      cells.forEach((h,j)=>{
+        const hl=(h||"").trim().toLowerCase();
+        if(hl==="zone"||hl==="zone name"){zoneCol=j;return;}
+        if(hl==="date"||hl==="report date"||hl.endsWith("date")){dateCol=j;return;}
+        const k=colKey(h); if(k&&!(k in hmap))hmap[k]=j;
+      });
+      if(Object.keys(hmap).length>=1) break;
+    }
+  }
+  if(headerIdx<0||Object.keys(hmap).length<1) return {};
+
+  const byZone={};
+  for(let i=headerIdx+1;i<lines.length;i++){
+    const cells=splitLine(lines[i]);
+    if(!cells.some(c=>c.trim())) continue;
+    const dcellRaw=dateCol>=0?(cells[dateCol]||""):"";
+    if(!dcellRaw||!isDateCell(dcellRaw)) continue;
+    const zname=zoneCol>=0?(cells[zoneCol]||"").trim():"";
+    const zid=zoneIdFromName(zname);
+    if(!zid) continue; // skip unknown zones
+    const vals={};
+    for(const k in hmap){const v=num(cells[hmap[k]]);if(v!=null)vals[k]=v;}
+    if(Object.keys(vals).length<1) continue;
+    (byZone[zid]=byZone[zid]||[]).push({date:normalizeDate(dcellRaw), vals});
+  }
+  return byZone;
+}
+
+/* Return display name for a known zone id */
+function knownZoneName(id){
+  const map={moh:"Mohandiseen",had:"Hadayek el Qobba",sho:"Shobra",oct:"October",
+    zay:"Sheikh Zayed",pal:"October Palm Hills",wat:"October Wahat",smt:"Smart Village",
+    ccc:"Cairo City Centre",giz:"Giza",hah:"Hadayek el Ahram"};
+  return map[id]||null;
+}
+
+/* ---------- fetch CSV from published sheet ---------- */
+async function fetchCSV(url){
+  // Try direct fetch first (works for published sheets)
+  const resp=await fetch(url,{cache:"no-store"});
+  if(!resp.ok) throw new Error("HTTP "+resp.status+" — الشيت مش منشور. اعمل File → Publish to web.");
+  return await resp.text();
+}
+
+/* parse a zone CSV — returns ALL rows as [{date, vals}] or null */
+function parseZoneCSV(csvText, zoneId){
+  const lines=csvText.split(/\r?\n/).filter(l=>l.trim()!=="");
+  if(lines.length<2) return null;
+
+  let headerIdx=-1, hmap={}, zoneCol=-1, dateCol=-1;
+  for(let i=0;i<Math.min(lines.length,15);i++){
+    const cells=splitLine(lines[i]);
+    const low=cells.map(c=>(c||"").trim().toLowerCase());
+    const hasDate=low.some(c=>c==="date"||c.includes("date")||c.includes("تاريخ"));
+    const hasMetric=low.some(c=>/utr|order|wh|rider|on.?time|working/.test(c));
+    if(hasDate||hasMetric){
+      headerIdx=i; hmap={}; zoneCol=-1; dateCol=-1;
+      cells.forEach((h,j)=>{
+        const hl=(h||"").trim().toLowerCase();
+        if(hl==="zone"||hl==="zone name"){zoneCol=j;return;}
+        if(hl==="date"||hl.includes("date")||hl.includes("تاريخ")){dateCol=j;return;}
+        const k=colKey(h); if(k&&!(k in hmap))hmap[k]=j;
+      });
+      if(Object.keys(hmap).length>=1) break;
+    }
+  }
+  if(headerIdx<0||Object.keys(hmap).length<1) return null;
+
+  const rows=[];
+  for(let i=headerIdx+1;i<lines.length;i++){
+    const cells=splitLine(lines[i]);
+    const dcellRaw=dateCol>=0?(cells[dateCol]||""):"";
+    if(!dcellRaw||!isDateCell(dcellRaw)) continue;
+    if(zoneCol>=0){
+      const zname=cells[zoneCol]||"";
+      if(zname.trim()&&zoneIdFromName(zname)&&zoneIdFromName(zname)!==zoneId) continue;
+    }
+    const vals={};
+    for(const k in hmap){const v=num(cells[hmap[k]]);if(v!=null)vals[k]=v;}
+    if(Object.keys(vals).length<1) continue;
+    rows.push({date:normalizeDate(dcellRaw), vals});
+  }
+  return rows.length>0 ? rows : null;
+}
+
+/* ---------- main sync function ---------- */
+async function syncFromSheets(silent){
+  const toSync=zoneList.filter(z=>z.url);
+  if(!toSync.length){
+    if(!silent){toggleSheetCfg();document.getElementById("cfgStatus").textContent="Add URLs first ↑";document.getElementById("cfgStatus").className="impstatus err";}
+    return;
+  }
+  const bar=document.getElementById("syncBar");
+  const msg=document.getElementById("syncMsg");
+  const spin=document.getElementById("syncSpinner");
+  bar.style.display="flex"; spin.textContent="⏳"; msg.textContent="Connecting…";
+  document.getElementById("syncBtn").classList.add("on");
+
+  let updated=[], failed=[];
+  for(const z of toSync){
+    try{
+      msg.textContent="Fetching "+z.name+"…";
+      const csv=await fetchCSV(z.url);
+      const rows=parseZoneCSV(csv,z.id);
+      if(!rows){
+        const hint=csv.split("\n")[0].substring(0,120);
+        failed.push(z.name+' (could not read — first line: "'+hint+'")');
+        continue;
+      }
+      sheetCache[z.id]=rows;
+      // add to ZONES array if new
+      if(!ZONES.find(zz=>zz.id===z.id)){
+        ZONES.push({id:z.id, name:z.name, data:emptyZoneData()});
+      } else {
+        const existing=ZONES.find(zz=>zz.id===z.id);
+        if(existing) existing.name=z.name;
+      }
+      updated.push(z.name+" ("+rows.length+" days)");
+    }catch(e){
+      failed.push(z.name+": "+e.message);
+    }
+  }
+
+  if(updated.length>0){
+    populateDateDropdowns();
+    const dates=allDates();
+    if(!dates.includes(state.labels.today)){state.labels.today=dates[0]||"";document.getElementById("pickToday").value=state.labels.today;}
+    if(!dates.includes(state.labels.prev)){state.labels.prev=dates[1]||dates[0]||"";document.getElementById("pickPrev").value=state.labels.prev;}
+    state.edits={};
+    applySheetCacheToState();
+    await saveState();
+    render();
+    spin.textContent="✅";
+    let txt="✅ "+updated.join(", ")+" — "+allDates().length+" dates available.";
+    if(failed.length) txt+="  ⚠ "+failed.join(" | ");
+    msg.textContent=txt;
+    setTimeout(()=>{bar.style.display="none";},6000);
+  } else {
+    spin.textContent="❌";
+    msg.innerHTML="<b>Could not read data.</b><br>"+failed.map(f=>"• "+escapeAttr(f)).join("<br>")+
+      "<br><br><small>Make sure the sheet is published as CSV: File → Share → Publish to web → CSV</small>";
+  }
+  document.getElementById("syncBtn").classList.remove("on");
+}
+
+function emptyZoneData(){const d={};META.forEach(m=>d[m.k]=[0,0]);return d;}
+
+/* ---------- Add Zone modal ---------- */
+let addZoneOpen=false, addMode="url";
+
+function setAddMode(mode){
+  addMode=mode;
+  document.getElementById("modeUrlPanel").style.display=mode==="url"?"flex":"none";
+  document.getElementById("modePastePanel").style.display=mode==="paste"?"flex":"none";
+  document.getElementById("modeUrlBtn").style.background=mode==="url"?"var(--ink2)":"#fff";
+  document.getElementById("modeUrlBtn").style.color=mode==="url"?"#fff":"var(--muted)";
+  document.getElementById("modePasteBtn").style.background=mode==="paste"?"var(--ink2)":"#fff";
+  document.getElementById("modePasteBtn").style.color=mode==="paste"?"#fff":"var(--muted)";
+}
+
+function toggleAddZone(){
+  addZoneOpen=!addZoneOpen;
+  const modal=document.getElementById("addZoneModal");
+  modal.style.display=addZoneOpen?"flex":"none";
+  document.getElementById("addZoneBtn").classList.toggle("on",addZoneOpen);
+  if(addZoneOpen){
+    document.getElementById("newZoneName").value="";
+    document.getElementById("newZoneUrl").value="";
+    document.getElementById("newZonePaste").value="";
+    document.getElementById("addZoneStatus").textContent="";
+    setAddMode("url");
+    setTimeout(()=>document.getElementById("newZoneName").focus(),50);
+  }
+}
+
+async function confirmAddZone(){
+  const name=document.getElementById("newZoneName").value.trim();
+  const st=document.getElementById("addZoneStatus");
+  if(!name){st.style.color="var(--bad)";st.textContent="❌ اكتب اسم الزون.";return;}
+
+  const id=slugify(name)+"-"+Date.now().toString(36);
+  let rows=null;
+
+  if(addMode==="url"){
+    const url=document.getElementById("newZoneUrl").value.trim();
+    if(!url){st.style.color="var(--bad)";st.textContent="❌ حط الـ URL.";return;}
+    st.style.color="var(--muted)";st.textContent="⏳ جاري الاتصال بالشيت…";
+    try{
+      const csv=await fetchCSV(url);
+      rows=parseZoneCSV(csv,id);
+      if(!rows){st.style.color="var(--bad)";st.textContent="❌ اتحمل الملف بس مفيش داتا — تأكد من أسماء الأعمدة.";return;}
+      zoneList.push({id,name,url});
+    }catch(e){
+      st.style.color="var(--bad)";st.textContent="❌ مش قادر يوصل للشيت — جرب Paste data.";return;
+    }
+  } else {
+    const txt=document.getElementById("newZonePaste").value.trim();
+    if(!txt){st.style.color="var(--bad)";st.textContent="❌ الصق الداتا الأول.";return;}
+    st.style.color="var(--muted)";st.textContent="⏳ جاري القراءة…";
+    rows=parseZoneCSV(txt,id);
+    if(!rows){
+      const pp=parsePaste(txt);
+      const firstZid=Object.keys(pp)[0];
+      if(firstZid&&pp[firstZid]){
+        const {today,prev}=pp[firstZid];
+        rows=[{date:prev.date,vals:prev.vals},{date:today.date,vals:today.vals}];
+      }
+    }
+    if(!rows){st.style.color="var(--bad)";st.textContent="❌ مش قادر يقرأ الداتا — تأكد إن أول سطر فيه الـ headers.";return;}
+    zoneList.push({id,name,url:""});
+  }
+
+  sheetCache[id]=rows;
+  ZONES.push({id,name,data:emptyZoneData()});
+  await saveSheetUrls();
+  populateDateDropdowns();
+  state.edits={};
+  applySheetCacheToState();
+  await saveState();
+
+  st.style.color="var(--good)";
+  st.textContent="✅ تم إضافة "+name+" — "+rows.length+" يوم من الداتا!";
+  setTimeout(()=>{toggleAddZone();curTab=id;render();},800);
+}
+
+function render(){
+  renderTabs();
+  const ov=document.getElementById("overview");
+  const zv=document.getElementById("zoneview");
+  const lv=document.getElementById("logview");
+  ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
+  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); }
+  else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
+  else{ zv.classList.remove("hidden"); renderZone(curTab); }
+}
+
+// Global delegated navigation for data-goto buttons (avoids onclick escaping issues)
+document.addEventListener("click", function(e){
+  const btn = e.target.closest("[data-goto]");
+  if(!btn) return;
+  curTab = btn.dataset.goto;
+  render();
+});
+
+(async function init(){
+  // ① عرض الداشبورد فوراً من الداتا الـ hardcoded — بدون انتظار
+  seedCacheFromHardcoded();
+  state.labels.today = "Jun 13";
+  state.labels.prev  = "Jun 12";
+  populateDateDropdowns();
+  applySheetCacheToState();
+  render();
+  setLiveStatus("syncing", "⏳ <b>جاري الاتصال بالشيت…</b>", "");
+
+  // ② حمّل الـ storage في الخلفية (لا يوقف العرض)
+  try { await loadState(); } catch(e){}
+  try { await loadSheetUrls(); } catch(e){}
+  try { await loadSharedActions(); } catch(e){}
+
+  // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns
+  populateDateDropdowns();
+  const pt = document.getElementById("pickToday");
+  const pp = document.getElementById("pickPrev");
+  if(pt) pt.value = state.labels.today;
+  if(pp) pp.value = state.labels.prev;
+
+  // ④ ابدأ الـ live polling (بيسحب من الشيت فوراً + كل 5 دقايق)
+  startLivePolling();
+})();
+
+/* ═══════════════════════════════════════════════
+   LIVE AUTO-REFRESH — polls every REFRESH_INTERVAL ms
+   ═══════════════════════════════════════════════ */
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 دقايق بالـ ms
+let liveTimer = null;        // setInterval handle
+let liveCountdown = null;    // setInterval for the countdown display
+let nextRefreshAt = null;    // timestamp of next auto-refresh
+let lastRefreshedAt = null;  // timestamp of last successful refresh
+let liveRunning = false;     // prevent overlapping fetches
+
+/* update the status bar UI */
+function setLiveStatus(state, msg, detail){
+  const dot  = document.getElementById("liveDot");
+  const txt  = document.getElementById("liveTxt");
+  const next = document.getElementById("liveNext");
+  if(!dot) return;
+  dot.className = "live-dot " + (state==="syncing"?"syncing":state==="err"?"err":"ok");
+  txt.innerHTML = msg;
+  next.textContent = detail||"";
+}
+
+/* countdown ticker — runs every second */
+function startCountdown(){
+  if(liveCountdown) clearInterval(liveCountdown);
+  liveCountdown = setInterval(()=>{
+    if(liveRunning) return; // already syncing — don't overwrite
+    if(!nextRefreshAt) return;
+    const secs = Math.max(0, Math.round((nextRefreshAt - Date.now()) / 1000));
+    const mins = Math.floor(secs / 60);
+    const ss   = String(secs % 60).padStart(2,"0");
+    const when  = lastRefreshedAt
+      ? "آخر تحديث: " + formatTime(lastRefreshedAt)
+      : "لم يتم مزامنة بعد";
+    document.getElementById("liveNext").textContent =
+      "التالي: " + (mins>0 ? mins+"د "+ss+"ث" : ss+"ث");
+    document.getElementById("liveTxt").innerHTML =
+      "<b>" + when + "</b>";
+  }, 1000);
+}
+
+function formatTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleTimeString("ar-EG", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+}
+
+/* core fetch-and-refresh logic (shared by auto + manual) */
+async function liveRefresh(silent){
+  if(liveRunning) return;
+
+  // لو مفيش URL، وريّ الـ setup prompt
+  if(!AUTO_SYNC_URL){
+    setLiveStatus("err",
+      "⚙ <b>محتاج Script URL عشان يتحدث تلقائياً</b> — " +
+      "<button onclick='openScriptSetup()' style='font-size:12px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:3px 10px;cursor:pointer;margin-right:4px'>إعداد الـ URL</button>",
+      "");
+    return;
+  }
+
+  liveRunning = true;
+  setLiveStatus("syncing", "⏳ <b>جاري التحديث من الشيت…</b>", "");
+
+  try{
+    const csv = await fetchSheetCSV();
+
+    const result = parseAllZonesFromCSV(csv);
+    const zids = Object.keys(result);
+
+    if(zids.length === 0){
+      setLiveStatus("err", "⚠ <b>الشيت اتحمل بس مفيش داتا</b> — تأكد من أسماء الأعمدة (Zone, Date)", "");
+      return;
+    }
+
+    // دايماً اكتب الداتا الجديدة وعمل render
+    for(const zid of zids){
+      sheetCache[zid] = result[zid];
+      if(!ZONES.find(z=>z.id===zid)){
+        ZONES.push({id:zid, name:knownZoneName(zid)||zid, data:emptyZoneData()});
+      }
+    }
+
+    populateDateDropdowns();
+    const dates = allDates();
+    state.labels.today = dates[0] || state.labels.today;
+    state.labels.prev  = dates[1] || dates[0] || state.labels.prev;
+    const pt=document.getElementById("pickToday"); if(pt) pt.value=state.labels.today;
+    const pp=document.getElementById("pickPrev");  if(pp) pp.value=state.labels.prev;
+    state.edits = {};
+    applySheetCacheToState();
+    await saveState();
+    render();
+
+    lastRefreshedAt = Date.now();
+    setLiveStatus("ok",
+      "<b>✅ " + state.labels.today + " vs " + state.labels.prev + "</b>" +
+      " — " + zids.length + " زون، " + dates.length + " يوم",
+      "");
+
+  } catch(e){
+    setLiveStatus("err",
+      "⚠ <b>فشل الاتصال</b> — <span style='font-size:11px;color:var(--muted)'>" + e.message + "</span> " +
+      "<button onclick='openScriptSetup()' style='font-size:11px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:2px 8px;cursor:pointer'>تعديل URL</button>",
+      "");
+  } finally{
+    liveRunning = false;
+    nextRefreshAt = Date.now() + REFRESH_INTERVAL;
+    startCountdown();
+  }
+}
+
+/* manual "↻ الآن" button */
+/* ── Script URL setup modal ── */
+function openScriptSetup(){
+  const modal = document.getElementById("scriptSetupModal");
+  modal.style.display = "flex";
+  const inp = document.getElementById("scriptUrlInput");
+  inp.value = AUTO_SYNC_URL || "";
+  document.getElementById("scriptSetupStatus").textContent = "";
+  setTimeout(()=>inp.focus(), 50);
+}
+function closeScriptSetup(){
+  document.getElementById("scriptSetupModal").style.display = "none";
+}
+async function saveAndTestScriptUrl(){
+  const url = document.getElementById("scriptUrlInput").value.trim();
+  const st  = document.getElementById("scriptSetupStatus");
+  if(!url){ st.style.color="var(--bad)"; st.textContent="❌ الصق الـ URL الأول"; return; }
+  st.style.color="var(--muted)"; st.textContent="⏳ بيجرب الاتصال…";
+  try{
+    const resp = await fetch(url, {cache:"no-store"});
+    if(!resp.ok) throw new Error("HTTP " + resp.status);
+    const csv = await resp.text();
+    if(csv.startsWith("ERROR:")) throw new Error(csv);
+    const result = parseAllZonesFromCSV(csv);
+    const zids = Object.keys(result);
+    if(zids.length === 0) throw new Error("الشيت اتحمل بس مفيش داتا — تأكد من أسماء الأعمدة");
+    AUTO_SYNC_URL = url;
+    localStorage.setItem(SYNC_URL_KEY, url);
+    st.style.color="var(--good)";
+    st.textContent = "✅ تمام! لقى " + zids.length + " زون — بيحدث الداشبورد…";
+    setTimeout(()=>{ closeScriptSetup(); liveRefreshNow(); }, 1200);
+  }catch(e){
+    st.style.color="var(--bad)";
+    st.textContent = "❌ " + e.message;
+  }
+}
+
+function liveRefreshNow(){
+  // reset timer so we don't double-fire
+  if(liveTimer) clearInterval(liveTimer);
+  liveRefresh(false).then(()=>{
+    nextRefreshAt = Date.now() + REFRESH_INTERVAL;
+    liveTimer = setInterval(()=>liveRefresh(true), REFRESH_INTERVAL);
+  });
+}
+
+/* start the auto-polling loop */
+function startLivePolling(){
+  // immediate first load
+  liveRefresh(false).then(()=>{
+    nextRefreshAt = Date.now() + REFRESH_INTERVAL;
+    liveTimer = setInterval(()=>liveRefresh(true), REFRESH_INTERVAL);
+  });
+}
+
+/* also refresh when the tab becomes visible again after being hidden */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible"){
+    // if we've been hidden longer than the refresh interval, sync immediately
+    if(nextRefreshAt && Date.now() > nextRefreshAt){
+      liveRefreshNow();
+    }
+  }
+});
+
+async function autoSyncOnLoad(){
+  // replaced by startLivePolling() — kept as no-op for compatibility
+}
+
+</script>
+</body>
+</html>
