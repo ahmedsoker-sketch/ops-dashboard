@@ -1188,10 +1188,18 @@ function renderLog(){
 async function toggleActionDone(key){
   if(!state.actionDone) state.actionDone={};
   state.actionDone[key]=!state.actionDone[key];
+  // save done state to localStorage only
+  try{ localStorage.setItem("tlbActionDone", JSON.stringify(state.actionDone)); }catch(e){}
   await saveState();
-  await saveSharedActions();
   renderLog();
   renderTabs();
+}
+
+function loadActionDone(){
+  try{
+    const raw=localStorage.getItem("tlbActionDone");
+    if(raw) state.actionDone=JSON.parse(raw);
+  }catch(e){}
 }
 
 function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -2036,6 +2044,7 @@ document.addEventListener("click", function(e){
   try { await loadState(); } catch(e){}
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
+  loadActionDone();
 
   // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns
   populateDateDropdowns();
