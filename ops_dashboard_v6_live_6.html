@@ -682,7 +682,6 @@ const CACHE_KEY="tlbSheetCache_v1";
 
 function saveSheetCache(){
   try{
-    // حفظ آخر 14 يوم بس عشان الحجم ميكبرش
     const trimmed={};
     for(const zid in sheetCache){
       const rows=sheetCache[zid];
@@ -690,7 +689,6 @@ function saveSheetCache(){
     }
     localStorage.setItem(CACHE_KEY, JSON.stringify(trimmed));
   }catch(e){
-    // لو الـ storage ممتلي، امسحه وابدأ من أول
     try{ localStorage.removeItem(CACHE_KEY); }catch(e2){}
   }
 }
@@ -699,13 +697,7 @@ function loadSheetCache(){
   try{
     const raw=localStorage.getItem(CACHE_KEY);
     if(raw){
-      const parsed=JSON.parse(raw);
-      // merge مع الـ cache الموجود
-      for(const zid in parsed){
-        if(!sheetCache[zid]||!sheetCache[zid].length){
-          sheetCache[zid]=parsed[zid];
-        }
-      }
+      sheetCache=JSON.parse(raw);
     }
   }catch(e){}
 }
@@ -2111,31 +2103,26 @@ document.addEventListener("click", function(e){
 });
 
 (async function init(){
-  // ① عرض الداشبورد فوراً من الداتا الـ hardcoded — بدون انتظار
-  loadSheetCache(); // load cached data from last session
-  seedCacheFromHardcoded();
-  state.labels.today = "Jun 13";
-  state.labels.prev  = "Jun 12";
-  populateDateDropdowns();
-  applyViewModeToState();
-  render();
-  setLiveStatus("syncing", "⏳ <b>جاري الاتصال بالشيت…</b>", "");
+  // ① حمّل الـ cache من الـ localStorage أولاً
+  loadSheetCache();
 
-  // ② حمّل الـ storage في الخلفية (لا يوقف العرض)
+  // ② حمّل الـ state
   try { await loadState(); } catch(e){}
   loadActionDone();
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
   loadActionDone();
 
-  // ③ لو الـ storage فيها تاريخ محفوظ، حدّث الـ dropdowns وعيد الرسم
+  // ③ عرض الداشبورد بالداتا المحفوظة فوراً
+  seedCacheFromHardcoded();
   populateDateDropdowns();
   const pt = document.getElementById("pickToday");
   const pp = document.getElementById("pickPrev");
-  if(pt) pt.value = state.labels.today;
-  if(pp) pp.value = state.labels.prev;
+  if(pt && state.labels.today) pt.value = state.labels.today;
+  if(pp && state.labels.prev) pp.value = state.labels.prev;
   applyViewModeToState();
-  render(); // re-render with cached data + loaded state
+  render();
+  setLiveStatus("syncing", "⏳ <b>جاري التحديث من الشيت…</b>", "");
 
   // ④ ابدأ الـ live polling (بيسحب من الشيت فوراً + كل 5 دقايق)
   startLivePolling();
