@@ -763,9 +763,12 @@ function populateDateDropdowns(){
     });
   });
 
-  // commit defaults to state if not set
   if(!state.labels.today&&dates.length>0){state.labels.today=dates[0]; selT.value=dates[0];}
   if(!state.labels.prev&&dates.length>1) {state.labels.prev=dates[1];  selP.value=dates[1];}
+
+  // also populate week and month dropdowns
+  populateWeekDropdowns();
+  populateMonthDropdowns();
 }
 
 function onDatePick(){
