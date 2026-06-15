@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rider Operations — Two-Day Comparison</title>
+<title>Giza Ops</title>
 <style>
   :root{
     --bg:#f5f6f8; --card:#ffffff; --ink:#16181d; --muted:#6b7280; --line:#e7e9ee;
@@ -218,7 +218,11 @@
   .aibox .aifooter{margin-top:10px;font-size:11.5px;color:var(--muted)}
   .ailoading{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:8px 0}
   .pulse{animation:pulse 1.2s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes aiBtnPulse{
+    0%{box-shadow:0 2px 8px rgba(255,90,0,.3)}
+    50%{box-shadow:0 2px 20px rgba(255,90,0,.6)}
+    100%{box-shadow:0 2px 8px rgba(255,90,0,.3)}
+  }
   @media (max-width:560px){
     th,td{padding:10px 9px}
     .offtbl th,.offtbl td{padding:7px 7px}
@@ -230,7 +234,7 @@
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Rider Operations</h1>
+      <h1>Giza Ops</h1>
       <div class="sub">Last two days per zone — good or bad at a glance</div>
     </div>
     <div class="daterow" id="datepickers">
@@ -658,7 +662,7 @@ async function fetchSheetCSV() {
 const STORE_KEY="tlbOpsState_v3";
 // sheetCache: {zid: [{date, vals}]}  — all rows from last sync, keyed by zone
 let sheetCache={};
-let state={labels:{today:"",prev:""}, edits:{}, actions:{}, targets:{}};
+let state={labels:{today:"",prev:""}, edits:{}, actions:{}, targets:{}, actionDone:{}};
 let mem={};
 
 async function loadState(){
@@ -668,14 +672,14 @@ async function loadState(){
     else if(window.localStorage){raw=window.localStorage.getItem(STORE_KEY);}
     if(raw){const s=JSON.parse(raw);
       state.labels=Object.assign(state.labels,s.labels||{});
-      state.edits=s.edits||{}; state.actions=s.actions||{}; state.targets=s.targets||{};
+      state.edits=s.edits||{}; state.actions=s.actions||{}; state.targets=s.targets||{}; state.actionDone=s.actionDone||{};
       // sheetCache is NOT saved to storage (too large) — rebuilt on sync
     }
   }catch(e){}
 }
 async function saveState(){
   // save state WITHOUT sheetCache — cache is rebuilt via sync
-  const payload=JSON.stringify({labels:state.labels, edits:state.edits, actions:state.actions, targets:state.targets});
+  const payload=JSON.stringify({labels:state.labels, edits:state.edits, actions:state.actions, targets:state.targets, actionDone:state.actionDone});
   try{
     if(window.storage&&window.storage.set){await window.storage.set(STORE_KEY,payload);}
     else if(window.localStorage){window.localStorage.setItem(STORE_KEY,payload);}
@@ -805,7 +809,7 @@ function deltaTxt(d,f){
   if(f==="int")return s+Math.round(d).toLocaleString("en-US");
   if(f==="d2")return s+d.toFixed(2);
   if(f==="d1")return s+d.toFixed(1);
-  if(f==="pct")return s+d.toFixed(1)+"pp";
+  if(f==="pct")return s+d.toFixed(1)+"%";
   return s+d;
 }
 
@@ -1084,50 +1088,88 @@ let aiResult=null, aiLoading=false;
 function renderLog(){
   const lv=document.getElementById("logview");
 
-  // collect all actions grouped by zone
-  const byZone={};
-  ZONES.forEach(z=>{ byZone[z.id]=[]; });
+  // collect all actions
+  const allEntries=[];
   for(const [key,raw] of Object.entries(state.actions)){
     if(!raw) continue;
     const [zid,...rest]=key.split("|");
-    const officeName=rest.join("|");
-    if(!byZone[zid]) byZone[zid]=[];
+    const zone=ZONES.find(z=>z.id===zid);
+    if(!zone) continue;
     const entry=getActionDisplay(key);
     if(!entry.text) continue;
-    byZone[zid].push({office:officeName, ...entry, key});
+    const done=state.actionDone&&state.actionDone[key];
+    allEntries.push({key, zone:zone.name, office:rest.join("|"), text:entry.text, date:entry.date||"—", done});
   }
+  allEntries.sort((a,b)=>a.done-b.done||(b.ts-a.ts));
 
-  // sort each zone by timestamp desc
-  Object.values(byZone).forEach(arr=>arr.sort((a,b)=>b.ts-a.ts));
+  const pending=allEntries.filter(e=>!e.done);
+  const done=allEntries.filter(e=>e.done);
 
-  const totalAll=Object.values(byZone).flat().length;
+  const rowHtml=(e)=>`
+    <tr style="opacity:${e.done?0.5:1};background:${e.done?"#f8fdf8":"#fff"}">
+      <td style="padding:10px 14px;font-size:12.5px;color:var(--muted);white-space:nowrap">${e.date}</td>
+      <td style="padding:10px 14px;font-size:13px;font-weight:700">${escapeHtml(e.zone)}</td>
+      <td style="padding:10px 14px;font-size:13px">${escapeHtml(e.office)}</td>
+      <td style="padding:10px 14px;font-size:13px;${e.done?"text-decoration:line-through;color:var(--muted)":""}">${escapeHtml(e.text)}</td>
+      <td style="padding:10px 14px;white-space:nowrap;display:flex;gap:6px;align-items:center">
+        <button onclick="toggleActionDone('${escapeAttr(e.key)}')"
+          style="font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid;
+          ${e.done?"background:var(--good-bg);color:var(--good);border-color:var(--good-line)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+          ${e.done?"✓ Done":"Mark done"}
+        </button>
+        <button onclick="clearAction('${escapeAttr(e.key)}')"
+          style="font-size:11px;padding:4px 8px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">✕</button>
+      </td>
+    </tr>`;
 
-  let html=`<div class="logwrap">`;
+  const tableWrap=(rows, title, color)=>`
+    <div class="panel" style="margin-bottom:16px">
+      <div class="ptitle">
+        <h2 style="font-size:15px">${title}</h2>
+        <span class="chip" style="background:${color==="green"?"var(--good-bg)":"var(--watch-bg)"};color:${color==="green"?"var(--good)":"var(--watch)"};border-color:${color==="green"?"var(--good-line)":"var(--watch-line)"}">
+          ${rows.length} action${rows.length!==1?"s":""}
+        </span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Zone</th><th>Office</th><th>Action</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows.map(rowHtml).join("")}</tbody>
+      </table>
+    </div>`;
 
-  // AI recommendations box — removed per user request
+  let html=`<div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div style="font-size:13px;color:var(--muted)">${allEntries.length} action${allEntries.length!==1?"s":""} total — ${pending.length} pending, ${done.length} done</div>
+    <button onclick="runAIAnalysis()" id="aiBtnLog"
+      style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;
+      background:linear-gradient(135deg,#ff5a00,#ff8c00);color:#fff;border:none;
+      box-shadow:0 2px 8px rgba(255,90,0,.3);animation:aiBtnPulse 2s infinite">
+      ✨ AI Analysis
+    </button>
+  </div>`;
 
-  if(totalAll===0){
-    html+=`<div class="logcard"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / Offices ▾" and type an action next to an office.</div></div>`;
+  if(allEntries.length===0){
+    html+=`<div class="panel"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / Offices ▾" and type an action next to an office.</div></div>`;
   } else {
-    ZONES.forEach(z=>{
-      const entries=byZone[z.id];
-      if(entries.length===0) return;
-      html+=`<div class="logcard">
-        <div class="logcard-head"><h3>${z.name}</h3><span class="chip watch">${entries.length} action${entries.length!==1?"s":""}</span></div>`;
-      entries.forEach(e=>{
-        html+=`<div class="logentry">
-          <span class="ldate">${e.date||"—"}</span>
-          <span class="loffice">${escapeHtml(e.office)}</span>
-          <span class="laction">${escapeHtml(e.text)}</span>
-          <button style="font-size:11px;padding:3px 8px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)" onclick="clearAction('${escapeAttr(e.key)}')">✕</button>
-        </div>`;
-      });
-      html+=`</div>`;
-    });
+    if(pending.length>0) html+=tableWrap(pending,"⏳ Pending","orange");
+    if(done.length>0) html+=tableWrap(done,"✅ Done","green");
   }
 
-  html+=`</div>`;
+  if(aiLoading){
+    html+=`<div class="aibox"><div class="ailoading"><span class="pulse">⏳</span> AI is analyzing actions…</div></div>`;
+  } else if(aiResult){
+    html+=`<div class="aibox"><h3>✨ AI Recommendations</h3><div class="aibody">${escapeHtml(aiResult)}</div></div>`;
+  }
+
   lv.innerHTML=html;
+}
+
+async function toggleActionDone(key){
+  if(!state.actionDone) state.actionDone={};
+  state.actionDone[key]=!state.actionDone[key];
+  await saveState();
+  renderLog();
+  renderTabs();
 }
 
 function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
