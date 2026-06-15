@@ -544,7 +544,7 @@ const ZONES = [
 ];
 
 /* ---------- offices: working hours per office [Jun 13, Jun 12] ---------- */
-const 3PLS = {
+const OFFICES = {
   had:[
     ["MTA",448,550],["El Tohami",217,278],["El Abtal",221,240],["Top delivery",1479,1557],
     ["BeCool",97,117],["Al Alamia",251,211],["Jasson",412,370],["Full Speed",324,310],
@@ -980,7 +980,7 @@ function officeTarget(zid,name){
 }
 function officesHTML(zid){
   // t = latest reviewed day's hours, p = the day before
-  const list=(3PLS[zid]||[]).map(o=>{
+  const list=(OFFICES[zid]||[]).map(o=>{
     const tgt=officeTarget(zid,o[0]);
     const gap=(tgt!=null)?(o[1]-tgt):null;   // gap vs target (negative = under target)
     return {name:o[0], t:o[1], p:o[2], dod:o[1]-o[2], tgt, gap};
