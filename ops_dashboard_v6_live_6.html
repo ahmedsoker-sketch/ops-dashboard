@@ -1847,7 +1847,7 @@ function parseAllZonesFromCSV(csvText){
     const vals={};
     for(const k in hmap){const v=num(cells[hmap[k]]);if(v!=null)vals[k]=v;}
     if(Object.keys(vals).length<1) continue;
-    (byZone[zid]=byZone[zid]||[]).push({date:normalizeDate(dcellRaw), vals});
+    (byZone[zid]=byZone[zid]||[]).push({date:normalizeDate(dcellRaw), isoDate:dcellRaw.trim(), vals});
   }
   return byZone;
 }
@@ -2264,56 +2264,54 @@ function getMonthFromDate(dateStr){
 function applyViewModeToState(){
   if(viewMode==="day"){ applySheetCacheToState(); return; }
 
-  const allDatesArr = allDates(); // sorted newest first
-
   ZONES.forEach(z=>{
     const rows = sheetCache[z.id]||[];
     if(!rows.length){ state.edits[z.id]={}; return; }
 
-    let groupFn;
-    if(viewMode==="week"){
-      // group by week number
-      const weeks = [...new Set(rows.map(r=>{
-        const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);
-        if(iso){const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7);}
-        return null;
-      }).filter(Boolean))].sort((a,b)=>b-a);
-      const w1=weeks[0], w2=weeks[1];
-      const r1=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return false;const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7)===w1;});
-      const r2=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return false;const d=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7)===w2;});
-      state.edits[z.id]={};
-      META.forEach(m=>{
-        const vt=avgVals(r1.map(r=>r.vals[m.k]));
-        const vp=avgVals(r2.map(r=>r.vals[m.k]));
-        if(vt!=null||vp!=null) state.edits[z.id][m.k]=[vt!=null?String(vt):null,vp!=null?String(vp):null];
-      });
-    } else if(viewMode==="month"){
-      const months=[...new Set(rows.map(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso?parseInt(iso[2]):null;}).filter(Boolean))].sort((a,b)=>b-a);
-      const m1=months[0], m2=months[1];
-      const r1=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso&&parseInt(iso[2])===m1;});
-      const r2=rows.filter(r=>{const iso=r.date.match(/(\d{4})-(\d{2})/);return iso&&parseInt(iso[2])===m2;});
-      state.edits[z.id]={};
-      META.forEach(m=>{
-        const vt=avgVals(r1.map(r=>r.vals[m.k]));
-        const vp=avgVals(r2.map(r=>r.vals[m.k]));
-        if(vt!=null||vp!=null) state.edits[z.id][m.k]=[vt!=null?String(vt):null,vp!=null?String(vp):null];
-      });
-    }
-  });
+    // helper: get ISO date from row
+    const getISO = r => r.isoDate || r.date;
 
-  // update header labels
-  if(viewMode==="week"){
-    const dates=allDates();
-    const weeks=[...new Set(dates.map(d=>{const iso=d.match(/(\d{4})-(\d{2})-(\d{2})/);if(!iso)return null;const dt=new Date(iso[1],iso[2]-1,iso[3]);const s=new Date(dt.getFullYear(),0,1);return Math.ceil(((dt-s)/86400000+s.getDay()+1)/7);}).filter(Boolean))].sort((a,b)=>b-a);
-    state.labels.today="Week "+weeks[0];
-    state.labels.prev="Week "+(weeks[1]||weeks[0]);
-  } else if(viewMode==="month"){
-    const monthNames=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const dates=allDates();
-    const months=[...new Set(dates.map(d=>{const iso=d.match(/(\d{4})-(\d{2})/);return iso?parseInt(iso[2]):null;}).filter(Boolean))].sort((a,b)=>b-a);
-    state.labels.today=monthNames[months[0]]||"This Month";
-    state.labels.prev=monthNames[months[1]]||"Last Month";
-  }
+    // helper: get week num from ISO string "2026-06-14"
+    const getWk = isoStr => {
+      const m = isoStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if(!m) return null;
+      const d = new Date(m[1], m[2]-1, m[3]);
+      const s = new Date(d.getFullYear(),0,1);
+      return Math.ceil(((d-s)/86400000+s.getDay()+1)/7);
+    };
+
+    // helper: get month num from ISO string
+    const getMo = isoStr => {
+      const m = isoStr.match(/(\d{4})-(\d{2})/);
+      return m ? parseInt(m[2]) : null;
+    };
+
+    let r1=[], r2=[];
+
+    if(viewMode==="week"){
+      const weeks=[...new Set(rows.map(r=>getWk(getISO(r))).filter(Boolean))].sort((a,b)=>b-a);
+      const w1=weeks[0], w2=weeks[1];
+      r1=rows.filter(r=>getWk(getISO(r))===w1);
+      r2=rows.filter(r=>getWk(getISO(r))===w2);
+      state.labels.today="Week "+w1;
+      state.labels.prev="Week "+(w2||w1);
+    } else if(viewMode==="month"){
+      const monthNames=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const months=[...new Set(rows.map(r=>getMo(getISO(r))).filter(Boolean))].sort((a,b)=>b-a);
+      const m1=months[0], m2=months[1];
+      r1=rows.filter(r=>getMo(getISO(r))===m1);
+      r2=rows.filter(r=>getMo(getISO(r))===m2);
+      state.labels.today=monthNames[m1]||"This Month";
+      state.labels.prev=monthNames[m2]||"Last Month";
+    }
+
+    state.edits[z.id]={};
+    META.forEach(m=>{
+      const vt=avgVals(r1.map(r=>r.vals[m.k]));
+      const vp=avgVals(r2.map(r=>r.vals[m.k]));
+      if(vt!=null||vp!=null) state.edits[z.id][m.k]=[vt!=null?String(vt):null, vp!=null?String(vp):null];
+    });
+  });
 }
 
 
