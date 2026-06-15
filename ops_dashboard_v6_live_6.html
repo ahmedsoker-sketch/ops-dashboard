@@ -1075,15 +1075,15 @@ function officesHTML(zid){
     // gap vs target column
     let gapCell;
     if(o.gap==null){ gapCell=`<span class="prev">—</span>`; }
-    else{ const gcls=o.gap<0?"drop":(o.gap>0?"rise":""); const gs=o.gap>0?"+":""; gapCell=`<span class="num ${gcls}">${gs}${o.gap}</span>`; }
+    else{ const gcls=o.gap<0?"drop":(o.gap>0?"rise":""); const gs=o.gap>0?"+":""; gapCell=`<span class="num ${gcls}">${gs}${Math.round(o.gap)}</span>`; }
     // change vs yesterday (secondary)
     const dcls=o.dod<0?"drop":(o.dod>0?"rise":""); const dsign=o.dod>0?"+":"";
     rows+=`<tr class="${isTop?'toprow':''}">
       <td class="on">${o.name}${rankBadge}</td>
-      <td class="num">${o.t.toLocaleString("en-US")}</td>
+      <td class="num">${Math.round(o.t).toLocaleString("en-US")}</td>
       <td>${tgtCell}</td>
       <td>${gapCell}</td>
-      <td class="num ${dcls}" style="color:var(--muted)">${dsign}${o.dod}</td>
+      <td class="num ${dcls}" style="color:var(--muted)">${dsign}${Math.round(o.dod)}</td>
       <td><div class="actwrap" style="display:flex;gap:6px;align-items:center">
         <input type="text" placeholder="Action taken…" value="${escapeAttr(actVal)}"
           id="act-${escapeAttr(zid)}-${escapeAttr(o.name)}"
@@ -1202,7 +1202,7 @@ function getWHForDate(zid, dateLabel){
 
   const result = [];
   for(const [name, hoursArr] of Object.entries(zd)){
-    const h = hoursArr[colIdx] || 0;
+    const h = Math.round(hoursArr[colIdx] || 0);
     result.push([name, h]);
   }
   return result.length ? result : null;
