@@ -1043,37 +1043,55 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbx7no0xtjQMkqzl2JYPDYLcWPFpWcURl0oNHnTHRMLRmNZK7cE_w1W_d4MHY7aD3S2H/exec";
 
 async function loadSharedActions(){
   try{
-    if(window.storage&&window.storage.get){
-      const r=await window.storage.get(ACTIONS_KEY,true); // shared=true
-      if(r&&r.value){
-        const a=JSON.parse(r.value);
-        // merge with local — shared wins for same key
-        state.actions=Object.assign({},state.actions,a);
+    const resp = await fetch(ACTIONS_SCRIPT_URL+"?action=getActions", {cache:"no-store"});
+    if(!resp.ok) return;
+    const data = await resp.json();
+    // rebuild state.actions from sheet
+    const newActions={};
+    const newDone={};
+    data.forEach(function(a){
+      if(a.key && a.text){
+        newActions[a.key]=JSON.stringify({text:a.text, date:a.date, ts:Date.now()});
+        if(a.done) newDone[a.key]=true;
       }
+    });
+    state.actions=newActions;
+    state.actionDone=newDone;
+  }catch(e){}
+}
+
+async function saveSharedActions(){
+  try{
+    const entries=[];
+    for(const [key,raw] of Object.entries(state.actions)){
+      if(!raw) continue;
+      const e=getActionDisplay(key);
+      if(!e.text) continue;
+      entries.push({key, text:e.text, date:e.date||"", done:!!(state.actionDone&&state.actionDone[key])});
     }
+    await fetch(ACTIONS_SCRIPT_URL, {
+      method:"POST",
+      body:JSON.stringify({type:"save", actions:entries})
+    });
   }catch(e){}
 }
 
 async function setAction(zid,name,v){
   const key=zid+"|"+name;
   if(v&&v.trim()){
-    // always use TODAY's real date — not the dashboard's selected date
     const realToday=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const entry={text:v.trim(), date:realToday, ts:Date.now()};
     state.actions[key]=JSON.stringify(entry);
   } else {
     delete state.actions[key];
+    if(state.actionDone) delete state.actionDone[key];
   }
   await saveState();
-  // also save to shared storage
-  try{
-    if(window.storage&&window.storage.set){
-      await window.storage.set(ACTIONS_KEY,JSON.stringify(state.actions),true); // shared
-    }
-  }catch(e){}
+  await saveSharedActions();
   if(curTab==="log") renderLog();
 }
 
@@ -1169,6 +1187,7 @@ async function toggleActionDone(key){
   if(!state.actionDone) state.actionDone={};
   state.actionDone[key]=!state.actionDone[key];
   await saveState();
+  await saveSharedActions();
   renderLog();
   renderTabs();
 }
@@ -1178,12 +1197,9 @@ function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;
 async function clearAction(key){
   if(!confirm("Remove this action?")) return;
   delete state.actions[key];
+  if(state.actionDone) delete state.actionDone[key];
   await saveState();
-  try{
-    if(window.storage&&window.storage.set){
-      await window.storage.set(ACTIONS_KEY,JSON.stringify(state.actions),true);
-    }
-  }catch(e){}
+  await saveSharedActions();
   aiResult=null;
   renderLog();
   renderTabs();
