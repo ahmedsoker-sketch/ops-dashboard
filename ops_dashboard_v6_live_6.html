@@ -1913,6 +1913,18 @@ function getMetricTarget(k){
 }
 
 let targetsEditMode = false;
+let targetsViewMode = "day"; // "day" | "week" | "month"
+let targetsWeekSel  = null;
+let targetsMonthSel = null;
+
+/* get average vals for a zone across a set of rows */
+function getAvgVals(rows){
+  const keys = {};
+  rows.forEach(r=>{ Object.entries(r.vals||{}).forEach(([k,v])=>{ if(v!=null){if(!keys[k])keys[k]=[];keys[k].push(v);} }); });
+  const out={};
+  Object.entries(keys).forEach(([k,arr])=>{ out[k]=arr.reduce((a,b)=>a+b,0)/arr.length; });
+  return out;
+}
 
 function renderTargets(){
   const tv = document.getElementById("targetview");
@@ -1926,11 +1938,43 @@ function renderTargets(){
     return Math.round(v).toLocaleString();
   };
 
+  // Build week/month options
+  const allRows = Object.values(sheetCache).flat();
+  const weekNums = [...new Set(allRows.map(r=>getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const monthNums = [...new Set(allRows.map(r=>getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const monthNames = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  if(!targetsWeekSel  && weekNums.length)  targetsWeekSel  = weekNums[0];
+  if(!targetsMonthSel && monthNums.length) targetsMonthSel = monthNums[0];
+
+  // Period label
+  const periodLabel = targetsViewMode==="day"   ? today
+    : targetsViewMode==="week"  ? "Week "+targetsWeekSel
+    : (monthNames[targetsMonthSel]||targetsMonthSel)||"";
+
+  // Mode selector
+  const modeBtn = (m,label) => `<button onclick="targetsViewMode='${m}';renderTargets()"
+    style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer;border:1px solid;
+    ${targetsViewMode===m?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+    ${label}</button>`;
+
+  const weekPicker = targetsViewMode==="week" ? `
+    <select onchange="targetsWeekSel=parseInt(this.value);renderTargets()"
+      style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit">
+      ${weekNums.map(w=>`<option value="${w}" ${w===targetsWeekSel?"selected":"">Week ${w}</option>`).join("")}
+    </select>` : "";
+
+  const monthPicker = targetsViewMode==="month" ? `
+    <select onchange="targetsMonthSel=parseInt(this.value);renderTargets()"
+      style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit">
+      ${monthNums.map(mo=>`<option value="${mo}" ${mo===targetsMonthSel?"selected":""}>${monthNames[mo]||mo}</option>`).join("")}
+    </select>` : "";
+
   let html = `
-  <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div>
       <div style="font-size:18px;font-weight:800;margin-bottom:4px">🎯 Target Tracker</div>
-      <div style="font-size:13px;color:var(--muted)">Showing ${today}</div>
+      <div style="font-size:13px;color:var(--muted)">${periodLabel}</div>
     </div>
     <button onclick="targetsEditMode=!targetsEditMode;renderTargets()"
       style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;border:2px solid;
@@ -1939,13 +1983,33 @@ function renderTargets(){
         : "background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
       ${targetsEditMode ? "🔒 Lock Targets" : "✏️ Edit Targets"}
     </button>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px">
+    ${modeBtn("day","📅 Day")}
+    ${modeBtn("week","📆 Week")}
+    ${modeBtn("month","🗓️ Month")}
+    ${weekPicker}
+    ${monthPicker}
   </div>`;
 
   ZONES.forEach(z=>{
     const rows = sheetCache[z.id]||[];
-    const todayRow = rows.find(r=>r.date===today);
-    if(!todayRow) return;
-    const v = todayRow.vals||{};
+
+    // Get values based on selected mode
+    let v = {};
+    if(targetsViewMode==="day"){
+      const row = rows.find(r=>r.date===today);
+      if(!row) return;
+      v = row.vals||{};
+    } else if(targetsViewMode==="week"){
+      const wRows = rows.filter(r=>getWkFromISO(getISOFromRow(r))===targetsWeekSel);
+      if(!wRows.length) return;
+      v = getAvgVals(wRows);
+    } else {
+      const mRows = rows.filter(r=>getMoFromISO(getISOFromRow(r))===targetsMonthSel);
+      if(!mRows.length) return;
+      v = getAvgVals(mRows);
+    }
 
     // Calculate score
     let scored=0, total=0;
