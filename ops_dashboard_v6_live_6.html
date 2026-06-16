@@ -735,7 +735,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1229,8 +1229,8 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
-const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec?action=getWH";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec?action=getWH";
 
 /* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
@@ -1736,7 +1736,10 @@ function renderTasks(){
         </div>
         <div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Owner</label>
-          <input id="nt-owner" placeholder="e.g. Ahmed" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+          <select id="nt-owner" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;background:var(--card);color:var(--ink)">
+            <option value="">— Select Owner —</option>
+            ${TEAM_MEMBERS.map(m=>`<option value="${m.name}">${m.name}</option>`).join("")}
+          </select>
         </div>
         <div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Area</label>
@@ -1791,19 +1794,23 @@ function renderTasks(){
 async function addTask(){
   const title = document.getElementById("nt-title")?.value?.trim();
   if(!title){ alert("Task name is required!"); return; }
+  const owner = document.getElementById("nt-owner")?.value||"";
   const task = {
     id: "t"+Date.now(),
     title,
-    owner:    document.getElementById("nt-owner")?.value?.trim()||"",
+    owner,
     area:     document.getElementById("nt-area")?.value||"general",
     priority: document.getElementById("nt-priority")?.value||"Medium",
     deadline: document.getElementById("nt-deadline")?.value||"",
     notes:    document.getElementById("nt-notes")?.value?.trim()||"",
     done: false,
+    notified: false,
     ts: Date.now()
   };
   tasksCache.push(task);
   await saveTasks();
+  // Send email if owner selected
+  if(owner) sendTaskEmailNotification(task);
   showAddTask = false;
   renderTasks();
 }
@@ -2009,7 +2016,7 @@ let metricTargets = JSON.parse(localStorage.getItem("metricTargets")||"{}");
 
 async function loadTargets(){
   try{
-    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec?action=getTargets";
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec?action=getTargets";
     const resp = await fetch(TARGETS_URL, {cache:"no-store"});
     if(!resp.ok) return;
     const text = await resp.text();
@@ -2025,7 +2032,7 @@ async function saveMetricTargets(){
   localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
   // Save to sheet
   try{
-    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
     await fetch(TARGETS_URL,{
       method:"POST",
       body:JSON.stringify({type:"saveTargets", targets:metricTargets})
@@ -3247,6 +3254,29 @@ function buildAnomaly(today){
     <div style="padding:0 16px">${pickerBar}</div>
     ${rows}
   </div>`;
+}
+
+/* ════════════════════════════════════════════
+   📧 EMAIL NOTIFICATION
+   ════════════════════════════════════════════ */
+const TEAM_MEMBERS = [
+  {name:"ATTIA",          email:"muhammed.ibrahim@talabat.com"},
+  {name:"Soker",          email:"ahmed.soker@talabat.com"},
+  {name:"Kerolos",        email:"kerolos.kamel@talabat.com"},
+  {name:"Ahmed Deshnawe", email:"ahmed.deshnawe@talabat.com"},
+  {name:"Ahmed Nour",     email:"ahmed.noureldeen@talabat.com"},
+  {name:"Ahmed Fayez",    email:"ahmed.fayez@talabat.com"},
+  {name:"Mohamed Beshary",email:"mohamed.hassan@talabat.com"},
+];
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
+
+async function sendTaskEmailNotification(task){
+  try{
+    await fetch(SCRIPT_URL, {
+      method:"POST",
+      body: JSON.stringify({type:"sendTaskEmail", task})
+    });
+  }catch(e){}
 }
 
 function setTarget(zid,name,v){
