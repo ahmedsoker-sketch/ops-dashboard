@@ -3089,6 +3089,11 @@ function buildMomentum(today){
 }
 
 /* ── 4. Anomaly Detection ── */
+let anomalyMode  = "day";
+let anomalyWeek  = null;
+let anomalyMonth = null;
+let anomalyDay   = null;
+
 function buildAnomaly(today){
   const fmtVal = (v,fmt)=>{
     if(v==null) return "—";
@@ -3098,42 +3103,94 @@ function buildAnomaly(today){
     return Math.round(v).toLocaleString();
   };
 
+  const allRows   = Object.values(sheetCache).flat();
+  const weekNums  = [...new Set(allRows.map(r=>getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const monthNums = [...new Set(allRows.map(r=>getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const allDaysList = [...new Set(allRows.map(r=>r.date).filter(Boolean))].sort((a,b)=>{
+    const ms={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    const ma=a.match(/([A-Za-z]+)\s+(\d+)/), mb=b.match(/([A-Za-z]+)\s+(\d+)/);
+    if(ma&&mb) return (ms[mb[1]]||0)*100+parseInt(mb[2]) - ((ms[ma[1]]||0)*100+parseInt(ma[2]));
+    return 0;
+  });
+  const monthNames = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  if(!anomalyDay   && allDaysList.length) anomalyDay   = allDaysList[0];
+  if(!anomalyWeek  && weekNums.length)    anomalyWeek  = weekNums[0];
+  if(!anomalyMonth && monthNums.length)   anomalyMonth = monthNums[0];
+  if(allDaysList.length && !allDaysList.includes(anomalyDay)) anomalyDay = allDaysList[0];
+
+  const modeBtn = (mode,label) => `<button onclick="anomalyMode='${mode}';renderAnalysis()"
+    style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+    ${anomalyMode===mode?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+    ${label}</button>`;
+
+  const dayPicker = anomalyMode==="day" ? `
+    <select onchange="anomalyDay=this.value;renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${allDaysList.map(d=>`<option value="${d}" ${d===anomalyDay?"selected":""}>${d}</option>`).join("")}
+    </select>` : "";
+
+  const weekPicker = anomalyMode==="week" ? `
+    <select onchange="anomalyWeek=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${weekNums.map(w=>`<option value="${w}" ${w===anomalyWeek?"selected":""}>Week ${w}</option>`).join("")}
+    </select>` : "";
+
+  const monthPicker = anomalyMode==="month" ? `
+    <select onchange="anomalyMonth=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${monthNums.map(mo=>`<option value="${mo}" ${mo===anomalyMonth?"selected":""}>${monthNames[mo]||mo}</option>`).join("")}
+    </select>` : "";
+
+  const periodLabel = anomalyMode==="day" ? anomalyDay : anomalyMode==="week" ? "Week "+anomalyWeek : monthNames[anomalyMonth]||"";
+
   const anomalies = [];
 
   ZONES.forEach(z=>{
     const zrows = sheetCache[z.id]||[];
-    const todayRow = zrows.find(r=>r.date===today);
-    if(!todayRow) return;
-    const todayVals = todayRow.vals||{};
+
+    // Get current period values
+    let curVals = {};
+    if(anomalyMode==="day"){
+      const row = zrows.find(r=>r.date===anomalyDay);
+      if(!row) return;
+      curVals = row.vals||{};
+    } else if(anomalyMode==="week"){
+      const wRows = zrows.filter(r=>getWkFromISO(getISOFromRow(r))===anomalyWeek);
+      if(!wRows.length) return;
+      curVals = getAvgVals(wRows);
+    } else {
+      const mRows = zrows.filter(r=>getMoFromISO(getISOFromRow(r))===anomalyMonth);
+      if(!mRows.length) return;
+      curVals = getAvgVals(mRows);
+    }
+
+    // Historical = everything outside selected period
+    const histRows = anomalyMode==="day"
+      ? zrows.filter(r=>r.date!==anomalyDay).slice(0,14)
+      : anomalyMode==="week"
+        ? zrows.filter(r=>getWkFromISO(getISOFromRow(r))!==anomalyWeek)
+        : zrows.filter(r=>getMoFromISO(getISOFromRow(r))!==anomalyMonth);
 
     META.forEach(m=>{
-      const cur = todayVals[m.k];
+      const cur = curVals[m.k];
       if(cur==null) return;
 
-      // Get historical values (last 14 days)
-      const hist = zrows
-        .filter(r=>r.date!==today)
-        .slice(0,14)
-        .map(r=>r.vals?.[m.k])
-        .filter(v=>v!=null);
-
+      const hist = histRows.map(r=>r.vals?.[m.k]).filter(v=>v!=null);
       if(hist.length < 3) return;
 
       const mean = hist.reduce((a,b)=>a+b,0)/hist.length;
       const std  = Math.sqrt(hist.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/hist.length);
       if(std < 0.01) return;
 
-      const rawZ = (cur - mean) / std;
-      const zScore = Math.abs(rawZ);
+      const zScore = Math.abs((cur - mean) / std);
       if(zScore > 2){
-        // Only flag BAD anomalies — improvement is not an anomaly
         const isBad = (m.better==="high" && cur < mean) || (m.better==="low" && cur > mean);
         if(!isBad) return;
         const dir = cur > mean ? "spike" : "drop";
         const pctChange = Math.round(Math.abs((cur-mean)/mean)*100);
         anomalies.push({
-          zone: z.name,
-          metric: m.ar,
+          zone: z.name, metric: m.ar,
           cur, mean, zScore: zScore.toFixed(1),
           dir, pctChange, fmt: m.fmt,
           severity: zScore > 3 ? "high" : "medium"
@@ -3144,9 +3201,19 @@ function buildAnomaly(today){
 
   anomalies.sort((a,b)=>b.zScore-a.zScore);
 
+  const pickerBar = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+    ${modeBtn("day","📅 Day")}
+    ${modeBtn("week","📆 Week")}
+    ${modeBtn("month","🗓️ Month")}
+    ${dayPicker}${weekPicker}${monthPicker}
+  </div>`;
+
   if(!anomalies.length) return `<div class="panel">
-    <div class="ptitle"><h2 style="font-size:15px">🚨 Anomaly Detection</h2></div>
-    <div style="padding:20px;text-align:center;color:var(--good);font-size:14px;font-weight:700">✅ No anomalies detected today — all metrics within normal range!</div>
+    <div class="ptitle">
+      <h2 style="font-size:15px">🚨 Anomaly Detection — ${periodLabel}</h2>
+    </div>
+    <div style="padding:0 16px">${pickerBar}</div>
+    <div style="padding:20px;text-align:center;color:var(--good);font-size:14px;font-weight:700">✅ No anomalies detected — all metrics within normal range!</div>
   </div>`;
 
   const rows = anomalies.map(a=>{
@@ -3160,7 +3227,7 @@ function buildAnomaly(today){
         <div>
           <div style="font-size:13px;font-weight:800">${escapeHtml(a.zone)} — ${escapeHtml(a.metric)}</div>
           <div style="font-size:12px;color:var(--muted)">
-            Today: <b style="color:${bc}">${fmtVal(a.cur,a.fmt)}</b>
+            Value: <b style="color:${bc}">${fmtVal(a.cur,a.fmt)}</b>
             · Avg: ${fmtVal(a.mean,a.fmt)}
             · <span style="color:${bc}">${a.dir==="drop"?"-":"+"}${a.pctChange}% from normal</span>
           </div>
@@ -3174,9 +3241,10 @@ function buildAnomaly(today){
 
   return `<div class="panel">
     <div class="ptitle">
-      <h2 style="font-size:15px">🚨 Anomaly Detection — ${today}</h2>
+      <h2 style="font-size:15px">🚨 Anomaly Detection — ${periodLabel}</h2>
       <span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">${anomalies.length} anomaly${anomalies.length!==1?"ies":""}</span>
     </div>
+    <div style="padding:0 16px">${pickerBar}</div>
     ${rows}
   </div>`;
 }
