@@ -648,7 +648,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1124,8 +1124,8 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec";
-const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec?action=getWH";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec?action=getWH";
 
 /* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
@@ -1881,8 +1881,30 @@ const DEFAULT_TARGETS = {
 
 let metricTargets = JSON.parse(localStorage.getItem("metricTargets")||"{}");
 
-function saveMetricTargets(){
+async function loadTargets(){
+  try{
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec?action=getTargets";
+    const resp = await fetch(TARGETS_URL, {cache:"no-store"});
+    if(!resp.ok) return;
+    const text = await resp.text();
+    if(!text||text==="{}"||text.startsWith("ERROR")) return;
+    const data = JSON.parse(text);
+    // Merge sheet targets into metricTargets
+    Object.assign(metricTargets, data);
+    localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
+  }catch(e){}
+}
+
+async function saveMetricTargets(){
   localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
+  // Save to sheet
+  try{
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbyx619Ng3TbFPi3uvVM7cACSArmCeuejVwm6IjRVcbbDDB_bmQBSC4x0gq9lbl2AQQM/exec";
+    await fetch(TARGETS_URL,{
+      method:"POST",
+      body:JSON.stringify({type:"saveTargets", targets:metricTargets})
+    });
+  }catch(e){}
 }
 
 function getMetricTarget(k){
@@ -2883,6 +2905,7 @@ document.addEventListener("click", function(e){
   try { await loadSharedActions(); } catch(e){}
   try { await loadWHData(); } catch(e){}
   try { await loadTasks(); } catch(e){}
+  try { await loadTargets(); } catch(e){}
   loadActionDone();
 
   // ③ عرض الداشبورد بالداتا المحفوظة فوراً
