@@ -297,13 +297,46 @@
   from { transform:translateX(120%); opacity:0; }
   to   { transform:translateX(0);    opacity:1; }
 }
+
+  body.dark {
+    --bg:#0f1117; --card:#1a1d27; --ink:#e8eaf0; --muted:#8b909e; --line:#2a2d3a;
+    --good:#22c55e; --good-bg:#0d2818; --good-line:#166534;
+    --bad:#f87171; --bad-bg:#2d1414; --bad-line:#7f1d1d;
+    --watch:#fbbf24; --watch-bg:#2d2008; --watch-line:#78450c;
+    --flat:#6b7280; --flat-bg:#1e2130;
+    --ink2:#e8eaf0;
+    --shadow:0 1px 3px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.2);
+  }
+  body.dark .zbox { background: var(--card) !important; }
+  body.dark .zbox.st-good { background: linear-gradient(145deg,#0d2818 0%,#1a1d27 55%) !important; }
+  body.dark .zbox.st-watch { background: linear-gradient(145deg,#2d2008 0%,#1a1d27 55%) !important; }
+  body.dark .zbox.st-bad { background: linear-gradient(145deg,#2d1414 0%,#1a1d27 55%) !important; }
+  body.dark .panel { background: var(--card); }
+  body.dark table thead tr { background: #1e2130; }
+  body.dark input, body.dark select { background:#1e2130; color:var(--ink); border-color:var(--line); }
+  body.dark .tgt-accordion { background: var(--card); }
+  body.dark .tgt-header:hover { background: #1e2130; }
+
+  #darkToggle {
+    font-size:18px;
+    padding:6px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--flat-bg);
+    cursor:pointer;
+    transition: all .2s;
+  }
+  #darkToggle:hover { background: var(--line); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:4px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
+      <div style="display:flex;align-items:center;gap:12px">
+        <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
+        <button id="darkToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+      </div>
       <div class="vmode" id="vmodeBar">
         <button class="active" onclick="setViewMode('day')" id="vDay">📅 Day</button>
         <button onclick="setViewMode('week')" id="vWeek">📆 Week</button>
@@ -2385,6 +2418,42 @@ function renderExport(){
       : `<div style="padding:14px;color:var(--muted);font-size:13px">No pending tasks ✅</div>`}
   </div>`;
 
+  // ── Weekly Summary ──
+  html += `<div class="panel" style="margin-top:16px">
+    <div class="ptitle"><h2 style="font-size:15px">📅 Weekly Summary — Week ${getWkFromISO(new Date().toISOString().slice(0,10))}</h2></div>
+    ${buildWeeklySummaryHTML()}
+  </div>`;
+
+  // ── Best / Worst Day ──
+  const {dayScore} = getBestWorstDays();
+  const dayOrder = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const scoredDays = dayOrder.filter(d=>dayScore[d]!=null).map(d=>({day:d,score:dayScore[d]}));
+  if(scoredDays.length){
+    const best  = [...scoredDays].sort((a,b)=>b.score-a.score)[0];
+    const worst = [...scoredDays].sort((a,b)=>a.score-b.score)[0];
+    const dayBars = scoredDays.map(d=>{
+      const pct = d.score;
+      const clr = pct>=80?"var(--good)":pct>=50?"var(--watch)":"var(--bad)";
+      const isBest  = d.day===best.day;
+      const isWorst = d.day===worst.day;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+        <div style="font-size:11px;font-weight:700;color:${clr}">${pct}%</div>
+        <div style="width:100%;background:var(--line);border-radius:6px;height:60px;position:relative;overflow:hidden">
+          <div style="position:absolute;bottom:0;width:100%;height:${pct}%;background:${clr};border-radius:6px;opacity:.85;transition:height .5s"></div>
+        </div>
+        <div style="font-size:12px;font-weight:800">${d.day}${isBest?" 🏆":isWorst?" 😰":""}</div>
+      </div>`;
+    }).join("");
+
+    html += `<div class="panel" style="margin-top:16px">
+      <div class="ptitle">
+        <h2 style="font-size:15px">📊 Best & Worst Days</h2>
+        <div style="font-size:12px;color:var(--muted)">Best: <b style="color:var(--good)">${best.day}</b> (${best.score}%) · Worst: <b style="color:var(--bad)">${worst.day}</b> (${worst.score}%)</div>
+      </div>
+      <div style="display:flex;gap:8px;padding:16px;align-items:flex-end;height:130px">${dayBars}</div>
+    </div>`;
+  }
+
   ev.innerHTML = html;
 }
 
@@ -2478,6 +2547,179 @@ function fmtDeadline(dl){
   const d = new Date(dl);
   if(isNaN(d)) return dl;
   return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+}
+
+/* ════════════════════════════════════════
+   1. DARK MODE
+   ════════════════════════════════════════ */
+function toggleDarkMode(){
+  const isDark = document.body.classList.toggle("dark");
+  localStorage.setItem("darkMode", isDark?"1":"0");
+  document.getElementById("darkToggle").textContent = isDark ? "☀️" : "🌙";
+}
+(function(){
+  if(localStorage.getItem("darkMode")==="1"){
+    document.body.classList.add("dark");
+    const btn = document.getElementById("darkToggle");
+    if(btn) btn.textContent = "☀️";
+  }
+})();
+
+/* ════════════════════════════════════════
+   4. ACTION FOLLOW-UP REMINDER
+   ════════════════════════════════════════ */
+function checkActionReminders(){
+  const now = Date.now();
+  const HOURS_48 = 48 * 60 * 60 * 1000;
+  const stale = [];
+
+  for(const [key,raw] of Object.entries(state.actions)){
+    if(!raw) continue;
+    const parts = key.split("|");
+    const zid = parts[0], office = parts[1]||"";
+    const zone = ZONES.find(z=>z.id===zid);
+    if(!zone) continue;
+    const entry = getActionDisplay(key);
+    if(!entry.text) continue;
+    const done = !!(state.actionDone&&state.actionDone[key]);
+    if(done) continue;
+    const age = now - (entry.ts||0);
+    if(age > HOURS_48) stale.push({zone:zone.name, office, text:entry.text, hours:Math.round(age/3600000)});
+  }
+
+  if(!stale.length) return;
+  const container = document.getElementById("tgt-notif");
+  if(!container) return;
+
+  stale.slice(0,2).forEach((a,i)=>{
+    setTimeout(()=>{
+      const el = document.createElement("div");
+      el.className = "tgt-notif-item";
+      el.style.background = "#92400e";
+      el.innerHTML = `⏰ <b>${escapeHtml(a.zone)}</b> · ${escapeHtml(a.office)}<br><span style="font-size:11px;opacity:.8">Pending ${a.hours}h: ${escapeHtml(a.text.slice(0,40))}${a.text.length>40?"...":""}</span>`;
+      el.onclick = ()=>{ curTab="log"; render(); el.remove(); };
+      container.appendChild(el);
+      setTimeout(()=>el.remove(), 10000);
+    }, i*500 + 1500);
+  });
+}
+
+/* ════════════════════════════════════════
+   5. BEST / WORST DAY ANALYSIS
+   ════════════════════════════════════════ */
+function getBestWorstDays(){
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const dayStats = {}; // {dayName: {metric: [values]}}
+
+  Object.values(sheetCache).flat().forEach(row=>{
+    const iso = row.isoDate||row.date||"";
+    // Parse date
+    let d;
+    const m = iso.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if(m) d = new Date(m[1],m[2]-1,m[3]);
+    else {
+      const m2 = iso.match(/([A-Za-z]+)\s+(\d+)/);
+      if(m2){ const ms={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11}; d=new Date(2026,ms[m2[1]]||0,parseInt(m2[2])); }
+    }
+    if(!d||isNaN(d)) return;
+    const dn = dayNames[d.getDay()];
+    if(!dayStats[dn]) dayStats[dn]={};
+    Object.entries(row.vals||{}).forEach(([k,v])=>{
+      if(v==null) return;
+      if(!dayStats[dn][k]) dayStats[dn][k]=[];
+      dayStats[dn][k].push(v);
+    });
+  });
+
+  // Average per day
+  const dayAvg = {};
+  Object.entries(dayStats).forEach(([dn,metrics])=>{
+    dayAvg[dn]={};
+    Object.entries(metrics).forEach(([k,arr])=>{
+      dayAvg[dn][k] = arr.reduce((a,b)=>a+b,0)/arr.length;
+    });
+  });
+
+  // Score each day based on targets
+  const dayScore = {};
+  Object.entries(dayAvg).forEach(([dn,metrics])=>{
+    let scored=0, total=0;
+    META.forEach(m=>{
+      const tgt = DEFAULT_TARGETS[m.k];
+      const val = metrics[m.k];
+      if(val==null||tgt==null) return;
+      total++;
+      if(m.better==="high"?val>=tgt:val<=tgt) scored++;
+    });
+    dayScore[dn] = total>0 ? Math.round((scored/total)*100) : null;
+  });
+
+  return {dayAvg, dayScore};
+}
+
+/* ════════════════════════════════════════
+   3. WEEKLY SUMMARY in Export
+   ════════════════════════════════════════ */
+function buildWeeklySummaryHTML(){
+  const allRows = Object.values(sheetCache).flat();
+  const weekNums = [...new Set(allRows.map(r=>getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  if(!weekNums.length) return "<div style='padding:14px;color:var(--muted)'>No weekly data available.</div>";
+
+  const latestWeek = weekNums[0];
+  const weekRows = allRows.filter(r=>getWkFromISO(getISOFromRow(r))===latestWeek);
+
+  // Group by zone
+  const byZone = {};
+  weekRows.forEach(r=>{
+    const zid = Object.keys(sheetCache).find(id=>sheetCache[id].includes(r));
+    if(!zid) return;
+    if(!byZone[zid]) byZone[zid]=[];
+    byZone[zid].push(r);
+  });
+
+  const fmtVal = (v,fmt)=>{
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  let rows = "";
+  ZONES.forEach(z=>{
+    const zRows = byZone[z.id]||[];
+    if(!zRows.length) return;
+    const avg = {};
+    META.forEach(m=>{
+      const vals = zRows.map(r=>r.vals?.[m.k]).filter(v=>v!=null);
+      avg[m.k] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    });
+
+    let tScored=0, tTotal=0;
+    META.forEach(m=>{
+      const tgt=getMetricTarget(m.k,z.id), val=avg[m.k];
+      if(val==null||tgt==null) return;
+      tTotal++;
+      if(m.better==="high"?val>=tgt:val<=tgt) tScored++;
+    });
+    const score = tTotal>0?Math.round((tScored/tTotal)*100):null;
+    const sc = score==null?"var(--muted)":score>=80?"var(--good)":score>=50?"var(--watch)":"var(--bad)";
+
+    rows += `<tr>
+      <td style="padding:9px 14px;font-weight:700">${z.name}</td>
+      ${META.slice(0,6).map(m=>`<td style="padding:9px 14px;text-align:center">${fmtVal(avg[m.k],m.fmt)}</td>`).join("")}
+      <td style="padding:9px 14px;text-align:center;font-weight:800;color:${sc}">${score!=null?score+"/100":"—"}</td>
+    </tr>`;
+  });
+
+  return `<table>
+    <thead><tr>
+      <th>Zone</th>
+      ${META.slice(0,6).map(m=>`<th style="text-align:center">${m.ar}</th>`).join("")}
+      <th style="text-align:center">Score</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function setTarget(zid,name,v){
@@ -3236,7 +3478,7 @@ function render(){
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
   ["taskview","briefingview","targetview","exportview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
-  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); checkTargetAlerts(); }
+  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); checkTargetAlerts(); checkActionReminders(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
   else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
