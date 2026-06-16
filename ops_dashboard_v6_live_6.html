@@ -267,6 +267,36 @@
   transition: max-height .35s ease;
 }
 .tgt-body.open { max-height:1000px; }
+
+/* Target Alert Notification */
+#tgt-notif {
+  position:fixed;
+  top:16px;
+  right:16px;
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-width:320px;
+  pointer-events:none;
+}
+.tgt-notif-item {
+  background:#1a1a2e;
+  color:#fff;
+  border-radius:12px;
+  padding:12px 16px;
+  font-size:13px;
+  font-weight:600;
+  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  animation: notifSlide .3s ease;
+  pointer-events:all;
+  cursor:pointer;
+}
+.tgt-notif-item:hover { opacity:.9; }
+@keyframes notifSlide {
+  from { transform:translateX(120%); opacity:0; }
+  to   { transform:translateX(0);    opacity:1; }
+}
 </style>
 </head>
 <body>
@@ -484,6 +514,7 @@
 
   <nav class="tabs" id="tabs"></nav>
 
+  <div id="tgt-notif"></div>
   <div id="overview"></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
@@ -977,9 +1008,26 @@ function renderOverview(){
       kpis='<div style="font-size:12px;color:var(--good);font-weight:700;padding:8px 0">✓ All metrics on track</div>';
     }
 
+    // Target score
+    let tScored=0, tTotal=0;
+    META.forEach(m=>{
+      const tgt=getMetricTarget(m.k);
+      const r=evalMetric(z.id,m);
+      if(r.t==null||tgt==null) return;
+      tTotal++;
+      const good = m.better==="high" ? r.t>=tgt : r.t<=tgt;
+      if(good) tScored++;
+    });
+    const tScore = tTotal>0 ? Math.round((tScored/tTotal)*100) : null;
+    const tScoreCls = tScore==null?'good':tScore>=80?'good':tScore>=50?'watch':'bad';
+    const tScoreBadge = tScore!=null
+      ? '<span class="zbox-badge '+tScoreCls+'" style="top:auto;bottom:10px;right:10px;font-size:10px">'+tScore+'/100</span>'
+      : '';
+
     html+='<div class="zbox st-'+v.cls+'" data-goto="'+z.id+'">'
         +'<div class="zbox-name">'+z.name+'</div>'
         +'<span class="zbox-badge '+v.cls+'">'+v.txt+'</span>'
+        +tScoreBadge
         +'<div class="zbox-kpis">'+kpis+'</div>'
         +'<div class="zbox-footer">'+foot+'<span class="zbox-tap">details &#8250;</span></div>'
         +'</div>';
@@ -1924,12 +1972,12 @@ const DEFAULT_TARGETS = {
   active_riders: null,
   orders: null,
   on_time: 85,
-  utr: null,
+  utr: 2.5,
   dt: 25,
   accept_time: 7,
   transport_fail: 5,
-  late_login: null,
-  no_show: null,
+  late_login: 10,
+  no_show: 5,
   break_hours: 10,
 };
 
@@ -2242,36 +2290,95 @@ function renderExport(){
     </tr>`;
   });
 
+  // Add score to tableRows
+  let tableRows2 = "";
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    const tRow = rows.find(r=>r.date===today);
+    const pRow = rows.find(r=>r.date===prev);
+    if(!tRow) return;
+    const v = tRow.vals||{};
+    const p = pRow?.vals||{};
+
+    let dropped=0;
+    META.forEach(m=>{
+      const cur=v[m.k],prv=p[m.k];
+      if(cur==null||prv==null) return;
+      if(m.better==="high"&&cur<prv) dropped++;
+      if(m.better==="low"&&cur>prv)  dropped++;
+    });
+
+    let tScored2=0, tTotal2=0;
+    META.forEach(m=>{
+      const tgt=getMetricTarget(m.k), cur=v[m.k];
+      if(cur==null||tgt==null) return;
+      tTotal2++;
+      if(m.better==="high"?cur>=tgt:cur<=tgt) tScored2++;
+    });
+    const tScore2 = tTotal2>0?Math.round((tScored2/tTotal2)*100):null;
+    const scoreStr = tScore2!=null?tScore2+"/100":"—";
+    const scoreColor2 = tScore2==null?"var(--muted)":tScore2>=80?"var(--good)":tScore2>=50?"var(--watch)":"var(--bad)";
+    const statusColor = dropped===0?"var(--good)":dropped<=2?"var(--watch)":"var(--bad)";
+    const statusText  = dropped===0?"✅ OK":dropped<=2?"⚠️ Watch":"🔴 Action";
+
+    tableRows2 += `<tr>
+      <td style="padding:9px 14px;font-weight:700">${z.name}</td>
+      ${META.slice(0,6).map(m=>`<td style="padding:9px 14px;text-align:center">${fmtVal(v[m.k],m.fmt)}</td>`).join("")}
+      <td style="padding:9px 14px;text-align:center;font-weight:800;color:${scoreColor2}">${scoreStr}</td>
+      <td style="padding:9px 14px;text-align:center;font-weight:700;color:${statusColor}">${statusText}</td>
+    </tr>`;
+  });
+
+  // Pending actions
+  const pendingActionsExport = Object.entries(state.actions).map(([key,raw])=>{
+    if(!raw) return "";
+    const parts=key.split("|");
+    const zone=ZONES.find(z=>z.id===parts[0]);
+    if(!zone) return "";
+    const e=getActionDisplay(key);
+    if(!e.text) return "";
+    const done=!!(state.actionDone&&state.actionDone[key]);
+    if(done) return "";
+    return `<tr><td style="padding:8px 14px;color:var(--muted)">${e.date||"—"}</td><td style="padding:8px 14px;font-weight:700">${zone.name}</td><td style="padding:8px 14px">${escapeHtml(parts[1]||"")}</td><td style="padding:8px 14px">${escapeHtml(e.text)}</td></tr>`;
+  }).filter(Boolean).join("");
+
+  // Pending tasks
+  const pendingTasksExport = tasksCache.filter(t=>!t.done).map(t=>{
+    const areaName = TASK_AREAS.find(a=>a.id===(t.area||"general"))?.name||"General";
+    const od = isOverdue(t.deadline);
+    return `<tr style="${od?"background:#fff5f5":""}">
+      <td style="padding:8px 14px;font-weight:700">${escapeHtml(t.title)}</td>
+      <td style="padding:8px 14px">${escapeHtml(t.owner||"—")}</td>
+      <td style="padding:8px 14px">${areaName}</td>
+      <td style="padding:8px 14px;color:${od?"var(--bad)":"var(--muted)"}">${t.deadline||"—"}${od?" ⚠️":""}</td>
+    </tr>`;
+  }).join("");
+
   html += `<div class="panel" id="exportPreview">
     <div class="ptitle"><h2 style="font-size:15px">📊 Zone Summary — ${today}</h2></div>
     <table>
       <thead><tr>
         <th>Zone</th>
         ${META.slice(0,6).map(m=>`<th style="text-align:center">${m.ar}</th>`).join("")}
+        <th style="text-align:center">Score</th>
         <th style="text-align:center">Status</th>
       </tr></thead>
-      <tbody>${tableRows}</tbody>
+      <tbody>${tableRows2}</tbody>
     </table>
   </div>
 
   <div class="panel" style="margin-top:16px">
     <div class="ptitle"><h2 style="font-size:15px">⏳ Pending Actions</h2></div>
-    <table>
-      <thead><tr><th>Date</th><th>Zone</th><th>3PL</th><th>Action</th></tr></thead>
-      <tbody>
-        ${Object.entries(state.actions).map(([key,raw])=>{
-          if(!raw) return "";
-          const parts=key.split("|");
-          const zone=ZONES.find(z=>z.id===parts[0]);
-          if(!zone) return "";
-          const e=getActionDisplay(key);
-          if(!e.text) return "";
-          const done=!!(state.actionDone&&state.actionDone[key]);
-          if(done) return "";
-          return `<tr><td style="padding:8px 14px;color:var(--muted)">${e.date||"—"}</td><td style="padding:8px 14px;font-weight:700">${zone.name}</td><td style="padding:8px 14px">${escapeHtml(parts[1]||"")}</td><td style="padding:8px 14px">${escapeHtml(e.text)}</td></tr>`;
-        }).join("")}
-      </tbody>
-    </table>
+    ${pendingActionsExport
+      ? `<table><thead><tr><th>Date</th><th>Zone</th><th>3PL</th><th>Action</th></tr></thead><tbody>${pendingActionsExport}</tbody></table>`
+      : `<div style="padding:14px;color:var(--muted);font-size:13px">No pending actions ✅</div>`}
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="ptitle"><h2 style="font-size:15px">📋 Pending Tasks</h2></div>
+    ${pendingTasksExport
+      ? `<table><thead><tr><th>Task</th><th>Owner</th><th>Area</th><th>Deadline</th></tr></thead><tbody>${pendingTasksExport}</tbody></table>`
+      : `<div style="padding:14px;color:var(--muted);font-size:13px">No pending tasks ✅</div>`}
   </div>`;
 
   ev.innerHTML = html;
@@ -2316,6 +2423,50 @@ function exportCSV(){
 
 function exportHTML(){
   window.print();
+}
+
+/* ── Target Alert Notifications ── */
+let _notifShown = false;
+
+function checkTargetAlerts(){
+  if(_notifShown) return;
+  const today = state.labels.today||"";
+  if(!today) return;
+
+  const alerts = [];
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    const tRow = rows.find(r=>r.date===today);
+    if(!tRow) return;
+    const v = tRow.vals||{};
+
+    let offCount=0;
+    const offMetrics=[];
+    META.forEach(m=>{
+      const tgt=getMetricTarget(m.k), cur=v[m.k];
+      if(cur==null||tgt==null) return;
+      const good = m.better==="high" ? cur>=tgt : cur<=tgt;
+      if(!good){ offCount++; offMetrics.push(m.ar); }
+    });
+    if(offCount>=3) alerts.push({name:z.name, count:offCount, metrics:offMetrics.slice(0,2)});
+  });
+
+  if(!alerts.length) return;
+  _notifShown = true;
+
+  const container = document.getElementById("tgt-notif");
+  if(!container) return;
+
+  alerts.slice(0,3).forEach((a,i)=>{
+    setTimeout(()=>{
+      const el = document.createElement("div");
+      el.className = "tgt-notif-item";
+      el.innerHTML = `🚨 <b>${escapeHtml(a.name)}</b> — ${a.count} metrics off target<br><span style="font-size:11px;opacity:.7">${a.metrics.map(escapeHtml).join(", ")}...</span>`;
+      el.onclick = ()=>{ curTab="targets"; render(); el.remove(); };
+      container.appendChild(el);
+      setTimeout(()=>el.remove(), 8000);
+    }, i*400);
+  });
 }
 
 function setTarget(zid,name,v){
@@ -3074,7 +3225,7 @@ function render(){
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
   ["taskview","briefingview","targetview","exportview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
-  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); }
+  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); checkTargetAlerts(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
   else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
