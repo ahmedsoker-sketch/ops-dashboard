@@ -455,6 +455,9 @@
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
   <div id="taskview" class="hidden"></div>
+  <div id="briefingview" class="hidden"></div>
+  <div id="targetview" class="hidden"></div>
+  <div id="exportview" class="hidden"></div>
 
   <div class="legend">
     <h3>How to read the colors</h3>
@@ -906,6 +909,9 @@ function renderTabs(){
   }
   t.appendChild(mk('log','Action Log'+(totalActions>0?' ('+totalActions+')':'')));
   t.appendChild(mk('tasks','📋 Tasks'));
+  t.appendChild(mk('briefing','☀️ Briefing'));
+  t.appendChild(mk('targets','🎯 Targets'));
+  t.appendChild(mk('export','📤 Export'));
 }
 
 function renderOverview(){
@@ -1712,6 +1718,387 @@ async function deleteTask(id){
   renderTasks();
 }
 
+/* ════════════════════════════════════════════
+   ☀️ MORNING BRIEFING
+   ════════════════════════════════════════════ */
+function renderBriefing(){
+  const bv = document.getElementById("briefingview");
+  const today = state.labels.today || "";
+  const prev  = state.labels.prev  || "";
+
+  // Collect zone data for today
+  const zoneStats = [];
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    const todayRow = rows.find(r=>r.date===today);
+    const prevRow  = rows.find(r=>r.date===prev);
+    if(!todayRow) return;
+    const v = todayRow.vals||{};
+    const p = prevRow?.vals||{};
+
+    // Count dropped metrics
+    let dropped = 0;
+    METRICS.forEach(m=>{
+      const cur=v[m.k], prv=p[m.k];
+      if(cur==null||prv==null) return;
+      if(m.better==="high" && cur<prv) dropped++;
+      if(m.better==="low"  && cur>prv) dropped++;
+    });
+
+    zoneStats.push({
+      id:z.id, name:z.name,
+      wh: v.working_hours||0,
+      on_time: v.on_time||0,
+      utr: v.utr||0,
+      orders: v.orders||0,
+      dropped
+    });
+  });
+
+  zoneStats.sort((a,b)=>b.dropped-a.dropped);
+  const worst3 = zoneStats.filter(z=>z.dropped>0).slice(0,3);
+
+  // Pending actions
+  const pendingActions = [];
+  for(const [key,raw] of Object.entries(state.actions)){
+    if(!raw) continue;
+    const parts=key.split("|");
+    const zid=parts[0], office=parts[1]||"";
+    const zone=ZONES.find(z=>z.id===zid);
+    if(!zone) continue;
+    const entry=getActionDisplay(key);
+    if(!entry.text) continue;
+    const done=!!(state.actionDone&&state.actionDone[key]);
+    if(!done) pendingActions.push({zone:zone.name, office, text:entry.text, date:entry.date||"—"});
+  }
+
+  // Overdue tasks
+  const overdueTasks = tasksCache.filter(t=>!t.done && isOverdue(t.deadline));
+  const todayTasks   = tasksCache.filter(t=>!t.done && t.deadline===new Date().toISOString().slice(0,10));
+
+  const now = new Date();
+  const greeting = now.getHours()<12?"Good Morning":"Good Afternoon";
+
+  let html = `
+  <div style="margin-bottom:20px">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px">☀️ ${greeting}</div>
+    <div style="font-size:13px;color:var(--muted)">${today} — Daily Operations Briefing</div>
+  </div>`;
+
+  // ── Zones needing attention ──
+  html += `<div class="panel" style="margin-bottom:16px">
+    <div class="ptitle"><h2 style="font-size:15px">🚨 Zones Needing Attention</h2></div>`;
+
+  if(worst3.length===0){
+    html += `<div style="padding:14px;color:var(--good);font-size:13px;font-weight:700">✅ All zones performing well today!</div>`;
+  } else {
+    worst3.forEach((z,i)=>{
+      const badge = z.dropped>=3?"Needs action":"Watch";
+      const bc    = z.dropped>=3?"var(--bad)":"var(--watch)";
+      const bbg   = z.dropped>=3?"var(--bad-bg)":"var(--watch-bg)";
+      const bline = z.dropped>=3?"var(--bad-line)":"var(--watch-line)";
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:18px;font-weight:900;color:var(--muted)">${i+1}</span>
+          <div>
+            <div style="font-size:14px;font-weight:800">${z.name}</div>
+            <div style="font-size:12px;color:var(--muted)">WH: ${Math.round(z.wh).toLocaleString()} · On-Time: ${z.on_time?z.on_time.toFixed(1)+"%":"—"} · UTR: ${z.utr?z.utr.toFixed(2):"—"}</div>
+          </div>
+        </div>
+        <span class="chip" style="background:${bbg};color:${bc};border-color:${bline}">${z.dropped} metrics dropped</span>
+      </div>`;
+    });
+  }
+  html += `</div>`;
+
+  // ── Pending Actions ──
+  html += `<div class="panel" style="margin-bottom:16px">
+    <div class="ptitle">
+      <h2 style="font-size:15px">⏳ Pending Actions</h2>
+      <span class="chip" style="background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)">${pendingActions.length} pending</span>
+    </div>`;
+  if(pendingActions.length===0){
+    html += `<div style="padding:14px;color:var(--muted);font-size:13px">No pending actions — great job! ✅</div>`;
+  } else {
+    pendingActions.slice(0,5).forEach(a=>{
+      html += `<div style="padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px">
+        <span style="font-weight:700">${escapeHtml(a.zone)}</span> · ${escapeHtml(a.office)}
+        <span style="color:var(--muted);margin-left:8px">${escapeHtml(a.text)}</span>
+        <span style="color:var(--muted);font-size:11px;float:right">${a.date}</span>
+      </div>`;
+    });
+    if(pendingActions.length>5){
+      html += `<div style="padding:10px 16px;color:var(--muted);font-size:12px">+${pendingActions.length-5} more pending actions</div>`;
+    }
+  }
+  html += `</div>`;
+
+  // ── Tasks due today / overdue ──
+  html += `<div class="panel" style="margin-bottom:16px">
+    <div class="ptitle">
+      <h2 style="font-size:15px">📋 Tasks Alert</h2>
+      <div style="display:flex;gap:6px">
+        ${overdueTasks.length>0?`<span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">⚠️ ${overdueTasks.length} overdue</span>`:""}
+        ${todayTasks.length>0?`<span class="chip" style="background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)">📅 ${todayTasks.length} due today</span>`:""}
+      </div>
+    </div>`;
+  const alertTasks = [...overdueTasks, ...todayTasks.filter(t=>!overdueTasks.includes(t))];
+  if(alertTasks.length===0){
+    html += `<div style="padding:14px;color:var(--muted);font-size:13px">No urgent tasks today ✅</div>`;
+  } else {
+    alertTasks.slice(0,5).forEach(t=>{
+      const od = isOverdue(t.deadline);
+      html += `<div style="padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px;${od?"background:#fff5f5":""}">
+        <span style="font-weight:700">${escapeHtml(t.title)}</span>
+        <span style="color:var(--muted);margin-left:8px">· ${escapeHtml(t.owner||"—")}</span>
+        <span style="color:${od?"var(--bad)":"var(--watch)"};font-size:11px;float:right">${od?"⚠️ Overdue":"📅 Due today"}</span>
+      </div>`;
+    });
+  }
+  html += `</div>`;
+
+  bv.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════
+   🎯 TARGET TRACKER
+   ════════════════════════════════════════════ */
+
+// Default targets — editable in UI
+const DEFAULT_TARGETS = {
+  working_hours: null,
+  active_riders: null,
+  orders: null,
+  on_time: 85,
+  utr: null,
+  dt: 25,
+  accept_time: 7,
+  transport_fail: 5,
+  late_login: null,
+  no_show: null,
+  break_hours: 10,
+};
+
+let metricTargets = JSON.parse(localStorage.getItem("metricTargets")||"{}");
+
+function saveMetricTargets(){
+  localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
+}
+
+function getMetricTarget(k){
+  if(metricTargets[k]!=null) return metricTargets[k];
+  return DEFAULT_TARGETS[k];
+}
+
+function renderTargets(){
+  const tv = document.getElementById("targetview");
+  const today = state.labels.today||"";
+
+  const fmtVal = (v, fmt) => {
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  let html = `
+  <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">🎯 Target Tracker</div>
+      <div style="font-size:13px;color:var(--muted)">Showing ${today} — click any target to edit</div>
+    </div>
+  </div>`;
+
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    const todayRow = rows.find(r=>r.date===today);
+    if(!todayRow) return;
+    const v = todayRow.vals||{};
+
+    let allGood = true;
+    let metricRows = "";
+    METRICS.forEach(m=>{
+      const tgt = getMetricTarget(m.k);
+      const cur = v[m.k];
+      if(cur==null) return;
+
+      let status="", color="var(--muted)", bg="", icon="—";
+      if(tgt!=null){
+        const good = m.better==="high" ? cur>=tgt : cur<=tgt;
+        if(good){ status="✅"; color="var(--good)"; bg="var(--good-bg)"; icon="✅"; }
+        else { status="❌"; color="var(--bad)"; bg="var(--bad-bg)"; icon="❌"; allGood=false; }
+      }
+
+      const gap = tgt!=null ? (m.better==="high" ? cur-tgt : tgt-cur) : null;
+      const gapStr = gap!=null ? (gap>=0?"+":"")+fmtVal(gap, m.fmt) : "—";
+
+      metricRows += `<tr style="background:${bg?bg+"22":""}">
+        <td style="padding:9px 14px;font-size:13px;font-weight:600">${m.ar}</td>
+        <td style="padding:9px 14px;font-size:13px;font-weight:800">${fmtVal(cur, m.fmt)}</td>
+        <td style="padding:9px 14px">
+          <input type="number" value="${tgt!=null?tgt:""}" placeholder="Set target"
+            onchange="metricTargets['${m.k}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderTargets()"
+            style="width:90px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit">
+        </td>
+        <td style="padding:9px 14px;font-size:13px;font-weight:700;color:${color}">${tgt!=null?gapStr:"—"}</td>
+        <td style="padding:9px 14px;font-size:16px">${tgt!=null?icon:"—"}</td>
+      </tr>`;
+    });
+
+    if(!metricRows) return;
+
+    html += `<div class="panel" style="margin-bottom:16px">
+      <div class="ptitle">
+        <h2 style="font-size:15px">${z.name}</h2>
+        ${allGood?'<span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">✅ On target</span>':'<span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">⚠️ Off target</span>'}
+      </div>
+      <table>
+        <thead><tr><th>Metric</th><th>Actual</th><th>Target</th><th>Gap</th><th></th></tr></thead>
+        <tbody>${metricRows}</tbody>
+      </table>
+    </div>`;
+  });
+
+  tv.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════
+   📤 EXPORT REPORT
+   ════════════════════════════════════════════ */
+function renderExport(){
+  const ev = document.getElementById("exportview");
+  const today = state.labels.today||"";
+  const prev  = state.labels.prev||"";
+
+  let html = `
+  <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">📤 Export Report</div>
+      <div style="font-size:13px;color:var(--muted)">${today} vs ${prev}</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="exportCSV()" style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;background:var(--accent);color:#fff;border:none">
+        ⬇️ Download CSV
+      </button>
+      <button onclick="exportHTML()" style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;background:#1a1a2e;color:#fff;border:none">
+        🖨️ Print / PDF
+      </button>
+    </div>
+  </div>`;
+
+  // Preview table
+  const fmtVal = (v, fmt) => {
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  let tableRows = "";
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    const tRow = rows.find(r=>r.date===today);
+    const pRow = rows.find(r=>r.date===prev);
+    if(!tRow) return;
+    const v = tRow.vals||{};
+    const p = pRow?.vals||{};
+
+    let dropped=0;
+    METRICS.forEach(m=>{
+      const cur=v[m.k],prv=p[m.k];
+      if(cur==null||prv==null) return;
+      if(m.better==="high"&&cur<prv) dropped++;
+      if(m.better==="low"&&cur>prv)  dropped++;
+    });
+
+    const statusColor = dropped===0?"var(--good)":dropped<=2?"var(--watch)":"var(--bad)";
+    const statusText  = dropped===0?"✅ OK":dropped<=2?"⚠️ Watch":"🔴 Action";
+
+    tableRows += `<tr>
+      <td style="padding:9px 14px;font-weight:700">${z.name}</td>
+      ${METRICS.slice(0,6).map(m=>`<td style="padding:9px 14px;text-align:center">${fmtVal(v[m.k],m.fmt)}</td>`).join("")}
+      <td style="padding:9px 14px;text-align:center;font-weight:700;color:${statusColor}">${statusText}</td>
+    </tr>`;
+  });
+
+  html += `<div class="panel" id="exportPreview">
+    <div class="ptitle"><h2 style="font-size:15px">📊 Zone Summary — ${today}</h2></div>
+    <table>
+      <thead><tr>
+        <th>Zone</th>
+        ${METRICS.slice(0,6).map(m=>`<th style="text-align:center">${m.ar}</th>`).join("")}
+        <th style="text-align:center">Status</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="ptitle"><h2 style="font-size:15px">⏳ Pending Actions</h2></div>
+    <table>
+      <thead><tr><th>Date</th><th>Zone</th><th>3PL</th><th>Action</th></tr></thead>
+      <tbody>
+        ${Object.entries(state.actions).map(([key,raw])=>{
+          if(!raw) return "";
+          const parts=key.split("|");
+          const zone=ZONES.find(z=>z.id===parts[0]);
+          if(!zone) return "";
+          const e=getActionDisplay(key);
+          if(!e.text) return "";
+          const done=!!(state.actionDone&&state.actionDone[key]);
+          if(done) return "";
+          return `<tr><td style="padding:8px 14px;color:var(--muted)">${e.date||"—"}</td><td style="padding:8px 14px;font-weight:700">${zone.name}</td><td style="padding:8px 14px">${escapeHtml(parts[1]||"")}</td><td style="padding:8px 14px">${escapeHtml(e.text)}</td></tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  </div>`;
+
+  ev.innerHTML = html;
+}
+
+function exportCSV(){
+  const today = state.labels.today||"";
+  const prev  = state.labels.prev||"";
+  const fmtVal = (v,fmt)=>{
+    if(v==null) return "";
+    if(fmt==="pct") return v.toFixed(1);
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v);
+  };
+
+  let csv = "Zone,"+METRICS.map(m=>m.ar).join(",")+",Status\n";
+  ZONES.forEach(z=>{
+    const rows=sheetCache[z.id]||[];
+    const tRow=rows.find(r=>r.date===today);
+    const pRow=rows.find(r=>r.date===prev);
+    if(!tRow) return;
+    const v=tRow.vals||{};
+    const p=pRow?.vals||{};
+    let dropped=0;
+    METRICS.forEach(m=>{
+      const cur=v[m.k],prv=p[m.k];
+      if(cur==null||prv==null) return;
+      if(m.better==="high"&&cur<prv) dropped++;
+      if(m.better==="low"&&cur>prv)  dropped++;
+    });
+    const status=dropped===0?"OK":dropped<=2?"Watch":"Needs Action";
+    csv += `"${z.name}",`+METRICS.map(m=>fmtVal(v[m.k],m.fmt)).join(",")+`,${status}\n`;
+  });
+
+  const blob = new Blob([csv],{type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `giza_ops_${today.replace(/ /g,"_")}.csv`;
+  a.click();
+}
+
+function exportHTML(){
+  window.print();
+}
+
 function setTarget(zid,name,v){
   state.targets[zid+"|"+name]=v; saveState();
   if(curTab!=="overview") renderZone(curTab);
@@ -2467,9 +2854,13 @@ function render(){
   const zv=document.getElementById("zoneview");
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
+  ["taskview","briefingview","targetview","exportview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
   if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
+  else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
+  else if(curTab==="targets"){ document.getElementById("targetview").classList.remove("hidden"); renderTargets(); }
+  else if(curTab==="export"){ document.getElementById("exportview").classList.remove("hidden"); renderExport(); }
   else{ zv.classList.remove("hidden"); renderZone(curTab); }
 }
 
