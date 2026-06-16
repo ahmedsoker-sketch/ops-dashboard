@@ -645,7 +645,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbzNUZzP43QWvHRv-XIkYHoVbZFnzzDXuTInscinlYk5GQ5pEjRoVGDLBGlQMqyEZByg/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1118,8 +1118,8 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzNUZzP43QWvHRv-XIkYHoVbZFnzzDXuTInscinlYk5GQ5pEjRoVGDLBGlQMqyEZByg/exec";
-const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzNUZzP43QWvHRv-XIkYHoVbZFnzzDXuTInscinlYk5GQ5pEjRoVGDLBGlQMqyEZByg/exec?action=getWH";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwmTjMYCvY0fpAkKoqACHY6VobMlEKB_0bdwWdJRO-oVLVTWDHbZ0X5WFCaTvS1ZS7u/exec?action=getWH";
 
 /* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
@@ -2492,6 +2492,7 @@ document.addEventListener("click", function(e){
   try { await loadSheetUrls(); } catch(e){}
   try { await loadSharedActions(); } catch(e){}
   try { await loadWHData(); } catch(e){}
+  try { await loadTasks(); } catch(e){}
   loadActionDone();
 
   // ③ عرض الداشبورد بالداتا المحفوظة فوراً
