@@ -1300,9 +1300,9 @@ async function confirmAction(zid, name){
 }
 
 async function setAction(zid,name,v){
-  const key=zid+"|"+name;
+  const realToday=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  const key=zid+"|"+name+"|"+realToday;
   if(v&&v.trim()){
-    const realToday=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
     const entry={text:v.trim(), date:realToday, ts:Date.now()};
     state.actions[key]=JSON.stringify(entry);
   } else {
@@ -1330,18 +1330,26 @@ function renderLog(){
   const allEntries=[];
   for(const [key,raw] of Object.entries(state.actions)){
     if(!raw) continue;
-    const [zid,...rest]=key.split("|");
+    const parts=key.split("|");
+    const zid=parts[0];
+    const office=parts[1]||"";
+    // parts[2] is date (may be absent in old keys)
     const zone=ZONES.find(z=>z.id===zid);
     if(!zone) continue;
     const entry=getActionDisplay(key);
     if(!entry.text) continue;
-    const done=state.actionDone&&state.actionDone[key];
-    allEntries.push({key, zone:zone.name, office:rest.join("|"), text:entry.text, date:entry.date||"—", done});
+    const done=!!(state.actionDone&&state.actionDone[key]);
+    allEntries.push({key, zid, zone:zone.name, office, text:entry.text, date:entry.date||parts[2]||"—", done, ts:entry.ts||0});
   }
   allEntries.sort((a,b)=>a.done-b.done||(b.ts-a.ts));
 
-  const pending=allEntries.filter(e=>!e.done);
-  const done=allEntries.filter(e=>e.done);
+  // Area mapping
+  const AREAS = [
+    { name:"🏙️ Mohandiseen Area", zids:["moh","sho","had"] },
+    { name:"🌆 October Area",     zids:["oct","zay","pal","wat","smt"] },
+    { name:"🌍 Giza Area",        zids:["giz","hah","ccc"] },
+  ];
+  function getArea(zid){ return AREAS.find(a=>a.zids.includes(zid)); }
 
   const rowHtml=(e)=>`
     <tr style="opacity:${e.done?0.5:1};background:${e.done?"#f8fdf8":"#fff"}">
@@ -1360,24 +1368,31 @@ function renderLog(){
       </td>
     </tr>`;
 
-  const tableWrap=(rows, title, color)=>`
-    <div class="panel" style="margin-bottom:16px">
+  const areaBlock=(area, entries)=>{
+    const pend=entries.filter(e=>!e.done);
+    const dn=entries.filter(e=>e.done);
+    const allSorted=[...pend,...dn];
+    return `
+    <div class="panel" style="margin-bottom:20px">
       <div class="ptitle">
-        <h2 style="font-size:15px">${title}</h2>
-        <span class="chip" style="background:${color==="green"?"var(--good-bg)":"var(--watch-bg)"};color:${color==="green"?"var(--good)":"var(--watch)"};border-color:${color==="green"?"var(--good-line)":"var(--watch-line)"}">
-          ${rows.length} action${rows.length!==1?"s":""}
-        </span>
+        <h2 style="font-size:15px">${area.name}</h2>
+        <div style="display:flex;gap:6px">
+          <span class="chip" style="background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)">⏳ ${pend.length} pending</span>
+          <span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">✅ ${dn.length} done</span>
+        </div>
       </div>
-      <table>
-        <thead><tr>
-          <th>Date</th><th>Zone</th><th>3PL</th><th>Action</th><th>Status</th>
-        </tr></thead>
-        <tbody>${rows.map(rowHtml).join("")}</tbody>
-      </table>
+      ${allSorted.length===0
+        ? `<div style="padding:14px;color:var(--muted);font-size:13px">No actions for this area.</div>`
+        : `<table>
+            <thead><tr><th>Date</th><th>Zone</th><th>3PL</th><th>Action</th><th>Status</th></tr></thead>
+            <tbody>${allSorted.map(rowHtml).join("")}</tbody>
+           </table>`
+      }
     </div>`;
+  };
 
   let html=`<div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <div style="font-size:13px;color:var(--muted)">${allEntries.length} action${allEntries.length!==1?"s":""} total — ${pending.length} pending, ${done.length} done</div>
+    <div style="font-size:13px;color:var(--muted)">${allEntries.length} action${allEntries.length!==1?"s":""} total — ${allEntries.filter(e=>!e.done).length} pending, ${allEntries.filter(e=>e.done).length} done</div>
     <button onclick="runAIAnalysis()" id="aiBtnLog"
       style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;
       background:linear-gradient(135deg,#ff5a00,#ff8c00);color:#fff;border:none;
@@ -1389,8 +1404,15 @@ function renderLog(){
   if(allEntries.length===0){
     html+=`<div class="panel"><div class="logempty">No actions logged yet — go to any zone tab, expand "Why? / 3PL ▾" and type an action next to a 3PL.</div></div>`;
   } else {
-    if(pending.length>0) html+=tableWrap(pending,"⏳ Pending","orange");
-    if(done.length>0) html+=tableWrap(done,"✅ Done","green");
+    AREAS.forEach(area=>{
+      const aEntries=allEntries.filter(e=>area.zids.includes(e.zid));
+      html+=areaBlock(area, aEntries);
+    });
+    // any zones not in areas
+    const otherEntries=allEntries.filter(e=>!getArea(e.zid));
+    if(otherEntries.length>0){
+      html+=areaBlock({name:"📍 Other Zones"}, otherEntries);
+    }
   }
 
   if(aiLoading){
