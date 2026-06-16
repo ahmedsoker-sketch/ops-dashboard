@@ -1769,16 +1769,17 @@ function renderBriefing(){
     const v = todayRow.vals||{};
     const p = prevRow?.vals||{};
 
-    // Count dropped metrics
-    let dropped = 0;
+    // Count metrics OFF TARGET (not just dropped)
+    let offTarget = 0;
     META.forEach(m=>{
-      const cur=v[m.k], prv=p[m.k];
-      if(cur==null||prv==null) return;
-      if(m.better==="high" && cur<prv) dropped++;
-      if(m.better==="low"  && cur>prv) dropped++;
+      const cur=v[m.k];
+      const tgt=getMetricTarget(m.k);
+      if(cur==null||tgt==null) return;
+      const good = m.better==="high" ? cur>=tgt : cur<=tgt;
+      if(!good) offTarget++;
     });
 
-    // Get top 3PLs under target for this zone
+    // Get top 4 3PLs under target for this zone
     const whData = getWHForDate(z.id, today);
     const top3PLs = [];
     if(whData){
@@ -1794,14 +1795,16 @@ function renderBriefing(){
       wh: v.working_hours||0,
       on_time: v.on_time||0,
       utr: v.utr||0,
+      dt: v.dt||0,
       orders: v.orders||0,
-      dropped,
-      top3PLs: top3PLs.slice(0,3)
+      offTarget,
+      top3PLs: top3PLs.slice(0,4)
     });
   });
 
-  zoneStats.sort((a,b)=>b.dropped-a.dropped);
-  const worst3 = zoneStats.filter(z=>z.dropped>0).slice(0,3);
+  // Sort by most metrics off target
+  zoneStats.sort((a,b)=>b.offTarget-a.offTarget);
+  const worst3 = zoneStats.filter(z=>z.offTarget>0).slice(0,5);
 
   // Pending actions
   const pendingActions = [];
@@ -1838,10 +1841,9 @@ function renderBriefing(){
     html += `<div style="padding:14px;color:var(--good);font-size:13px;font-weight:700">✅ All zones performing well today!</div>`;
   } else {
     worst3.forEach((z,i)=>{
-      const badge = z.dropped>=3?"Needs action":"Watch";
-      const bc    = z.dropped>=3?"var(--bad)":"var(--watch)";
-      const bbg   = z.dropped>=3?"var(--bad-bg)":"var(--watch-bg)";
-      const bline = z.dropped>=3?"var(--bad-line)":"var(--watch-line)";
+      const bc    = z.offTarget>=3?"var(--bad)":"var(--watch)";
+      const bbg   = z.offTarget>=3?"var(--bad-bg)":"var(--watch-bg)";
+      const bline = z.offTarget>=3?"var(--bad-line)":"var(--watch-line)";
       const plStr = z.top3PLs.length>0
         ? z.top3PLs.map(p=>`<span style="font-weight:700">${escapeHtml(p.name)}</span> <span style="color:var(--bad)">${p.gap}h</span>`).join(" &nbsp;·&nbsp; ")
         : "";
@@ -1852,10 +1854,10 @@ function renderBriefing(){
             <span style="font-size:18px;font-weight:900;color:var(--muted)">${i+1}</span>
             <div>
               <div style="font-size:14px;font-weight:800">${z.name}</div>
-              <div style="font-size:12px;color:var(--muted)">WH: ${Math.round(z.wh).toLocaleString()} · On-Time: ${z.on_time?z.on_time.toFixed(1)+"%":"—"} · UTR: ${z.utr?z.utr.toFixed(2):"—"}</div>
+              <div style="font-size:12px;color:var(--muted)">WH: ${Math.round(z.wh).toLocaleString()} · On-Time: ${z.on_time?z.on_time.toFixed(1)+"%":"—"} · UTR: ${z.utr?z.utr.toFixed(2):"—"} · DT: ${z.dt?z.dt.toFixed(1):"—"}</div>
             </div>
           </div>
-          <span class="chip" style="background:${bbg};color:${bc};border-color:${bline}">${z.dropped} metrics dropped</span>
+          <span class="chip" style="background:${bbg};color:${bc};border-color:${bline}">${z.offTarget} off target</span>
         </div>
         ${plStr?`<div style="font-size:12px;padding-left:36px;color:var(--muted)">3PLs: ${plStr}</div>`:""}
       </div>`;
