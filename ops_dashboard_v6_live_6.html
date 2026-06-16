@@ -1778,13 +1778,25 @@ function renderBriefing(){
       if(m.better==="low"  && cur>prv) dropped++;
     });
 
+    // Get top 3PLs under target for this zone
+    const whData = getWHForDate(z.id, today);
+    const top3PLs = [];
+    if(whData){
+      whData.forEach(([name, hrs])=>{
+        const tgt = whTargets[z.id]&&whTargets[z.id][name];
+        if(tgt!=null && hrs<tgt) top3PLs.push({name, hrs:Math.round(hrs), gap:Math.round(hrs-tgt)});
+      });
+      top3PLs.sort((a,b)=>a.gap-b.gap);
+    }
+
     zoneStats.push({
       id:z.id, name:z.name,
       wh: v.working_hours||0,
       on_time: v.on_time||0,
       utr: v.utr||0,
       orders: v.orders||0,
-      dropped
+      dropped,
+      top3PLs: top3PLs.slice(0,3)
     });
   });
 
@@ -1830,15 +1842,22 @@ function renderBriefing(){
       const bc    = z.dropped>=3?"var(--bad)":"var(--watch)";
       const bbg   = z.dropped>=3?"var(--bad-bg)":"var(--watch-bg)";
       const bline = z.dropped>=3?"var(--bad-line)":"var(--watch-line)";
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)">
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="font-size:18px;font-weight:900;color:var(--muted)">${i+1}</span>
-          <div>
-            <div style="font-size:14px;font-weight:800">${z.name}</div>
-            <div style="font-size:12px;color:var(--muted)">WH: ${Math.round(z.wh).toLocaleString()} · On-Time: ${z.on_time?z.on_time.toFixed(1)+"%":"—"} · UTR: ${z.utr?z.utr.toFixed(2):"—"}</div>
+      const plStr = z.top3PLs.length>0
+        ? z.top3PLs.map(p=>`<span style="font-weight:700">${escapeHtml(p.name)}</span> <span style="color:var(--bad)">${p.gap}h</span>`).join(" &nbsp;·&nbsp; ")
+        : "";
+
+      html += `<div style="padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${plStr?"6px":"0"}">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:18px;font-weight:900;color:var(--muted)">${i+1}</span>
+            <div>
+              <div style="font-size:14px;font-weight:800">${z.name}</div>
+              <div style="font-size:12px;color:var(--muted)">WH: ${Math.round(z.wh).toLocaleString()} · On-Time: ${z.on_time?z.on_time.toFixed(1)+"%":"—"} · UTR: ${z.utr?z.utr.toFixed(2):"—"}</div>
+            </div>
           </div>
+          <span class="chip" style="background:${bbg};color:${bc};border-color:${bline}">${z.dropped} metrics dropped</span>
         </div>
-        <span class="chip" style="background:${bbg};color:${bc};border-color:${bline}">${z.dropped} metrics dropped</span>
+        ${plStr?`<div style="font-size:12px;padding-left:36px;color:var(--muted)">3PLs: ${plStr}</div>`:""}
       </div>`;
     });
   }
