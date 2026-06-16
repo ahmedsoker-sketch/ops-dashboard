@@ -1912,6 +1912,8 @@ function getMetricTarget(k){
   return DEFAULT_TARGETS[k];
 }
 
+let targetsEditMode = false;
+
 function renderTargets(){
   const tv = document.getElementById("targetview");
   const today = state.labels.today||"";
@@ -1925,11 +1927,18 @@ function renderTargets(){
   };
 
   let html = `
-  <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+  <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div>
       <div style="font-size:18px;font-weight:800;margin-bottom:4px">🎯 Target Tracker</div>
-      <div style="font-size:13px;color:var(--muted)">Showing ${today} — click any target to edit</div>
+      <div style="font-size:13px;color:var(--muted)">Showing ${today}</div>
     </div>
+    <button onclick="targetsEditMode=!targetsEditMode;renderTargets()"
+      style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;border:2px solid;
+      ${targetsEditMode
+        ? "background:#1a1a2e;color:#fff;border-color:#1a1a2e"
+        : "background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+      ${targetsEditMode ? "🔒 Lock Targets" : "✏️ Edit Targets"}
+    </button>
   </div>`;
 
   ZONES.forEach(z=>{
@@ -1938,31 +1947,47 @@ function renderTargets(){
     if(!todayRow) return;
     const v = todayRow.vals||{};
 
-    let allGood = true;
+    // Calculate score
+    let scored=0, total=0;
+    META.forEach(m=>{
+      const tgt=getMetricTarget(m.k);
+      const cur=v[m.k];
+      if(cur==null||tgt==null) return;
+      total++;
+      const good = m.better==="high" ? cur>=tgt : cur<=tgt;
+      if(good) scored++;
+    });
+    const score = total>0 ? Math.round((scored/total)*100) : null;
+    const scoreColor = score==null?"var(--muted)":score>=80?"var(--good)":score>=50?"var(--watch)":"var(--bad)";
+    const scoreBg    = score==null?"var(--flat-bg)":score>=80?"var(--good-bg)":score>=50?"var(--watch-bg)":"var(--bad-bg)";
+    const scoreLine  = score==null?"var(--line)":score>=80?"var(--good-line)":score>=50?"var(--watch-line)":"var(--bad-line)";
+
     let metricRows = "";
     META.forEach(m=>{
       const tgt = getMetricTarget(m.k);
       const cur = v[m.k];
       if(cur==null) return;
 
-      let status="", color="var(--muted)", bg="", icon="—";
+      let color="var(--muted)", bg="", icon="—";
       if(tgt!=null){
         const good = m.better==="high" ? cur>=tgt : cur<=tgt;
-        if(good){ status="✅"; color="var(--good)"; bg="var(--good-bg)"; icon="✅"; }
-        else { status="❌"; color="var(--bad)"; bg="var(--bad-bg)"; icon="❌"; allGood=false; }
+        if(good){ color="var(--good)"; bg="var(--good-bg)"; icon="✅"; }
+        else     { color="var(--bad)";  bg="var(--bad-bg)";  icon="❌"; }
       }
 
       const gap = tgt!=null ? (m.better==="high" ? cur-tgt : tgt-cur) : null;
       const gapStr = gap!=null ? (gap>=0?"+":"")+fmtVal(gap, m.fmt) : "—";
 
+      const targetCell = targetsEditMode
+        ? `<input type="number" value="${tgt!=null?tgt:""}" placeholder="Set target"
+            onchange="metricTargets['${m.k}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderTargets()"
+            style="width:90px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit">`
+        : `<span style="font-size:13px;font-weight:700;color:var(--ink)">${tgt!=null?fmtVal(tgt,m.fmt):"—"}</span>`;
+
       metricRows += `<tr style="background:${bg?bg+"22":""}">
         <td style="padding:9px 14px;font-size:13px;font-weight:600">${m.ar}</td>
         <td style="padding:9px 14px;font-size:13px;font-weight:800">${fmtVal(cur, m.fmt)}</td>
-        <td style="padding:9px 14px">
-          <input type="number" value="${tgt!=null?tgt:""}" placeholder="Set target"
-            onchange="metricTargets['${m.k}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderTargets()"
-            style="width:90px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit">
-        </td>
+        <td style="padding:9px 14px">${targetCell}</td>
         <td style="padding:9px 14px;font-size:13px;font-weight:700;color:${color}">${tgt!=null?gapStr:"—"}</td>
         <td style="padding:9px 14px;font-size:16px">${tgt!=null?icon:"—"}</td>
       </tr>`;
@@ -1970,10 +1995,16 @@ function renderTargets(){
 
     if(!metricRows) return;
 
+    const scoreBadge = score!=null
+      ? `<span class="chip" style="background:${scoreBg};color:${scoreColor};border-color:${scoreLine};font-size:13px;font-weight:800">
+          ${score}/100
+        </span>`
+      : "";
+
     html += `<div class="panel" style="margin-bottom:16px">
       <div class="ptitle">
         <h2 style="font-size:15px">${z.name}</h2>
-        ${allGood?'<span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">✅ On target</span>':'<span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">⚠️ Off target</span>'}
+        ${scoreBadge}
       </div>
       <table>
         <thead><tr><th>Metric</th><th>Actual</th><th>Target</th><th>Gap</th><th></th></tr></thead>
