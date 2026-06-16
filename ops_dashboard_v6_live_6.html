@@ -1738,7 +1738,7 @@ function renderBriefing(){
 
     // Count dropped metrics
     let dropped = 0;
-    METRICS.forEach(m=>{
+    META.forEach(m=>{
       const cur=v[m.k], prv=p[m.k];
       if(cur==null||prv==null) return;
       if(m.better==="high" && cur<prv) dropped++;
@@ -1918,7 +1918,7 @@ function renderTargets(){
 
     let allGood = true;
     let metricRows = "";
-    METRICS.forEach(m=>{
+    META.forEach(m=>{
       const tgt = getMetricTarget(m.k);
       const cur = v[m.k];
       if(cur==null) return;
@@ -2006,7 +2006,7 @@ function renderExport(){
     const p = pRow?.vals||{};
 
     let dropped=0;
-    METRICS.forEach(m=>{
+    META.forEach(m=>{
       const cur=v[m.k],prv=p[m.k];
       if(cur==null||prv==null) return;
       if(m.better==="high"&&cur<prv) dropped++;
@@ -2018,7 +2018,7 @@ function renderExport(){
 
     tableRows += `<tr>
       <td style="padding:9px 14px;font-weight:700">${z.name}</td>
-      ${METRICS.slice(0,6).map(m=>`<td style="padding:9px 14px;text-align:center">${fmtVal(v[m.k],m.fmt)}</td>`).join("")}
+      ${META.slice(0,6).map(m=>`<td style="padding:9px 14px;text-align:center">${fmtVal(v[m.k],m.fmt)}</td>`).join("")}
       <td style="padding:9px 14px;text-align:center;font-weight:700;color:${statusColor}">${statusText}</td>
     </tr>`;
   });
@@ -2028,7 +2028,7 @@ function renderExport(){
     <table>
       <thead><tr>
         <th>Zone</th>
-        ${METRICS.slice(0,6).map(m=>`<th style="text-align:center">${m.ar}</th>`).join("")}
+        ${META.slice(0,6).map(m=>`<th style="text-align:center">${m.ar}</th>`).join("")}
         <th style="text-align:center">Status</th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
@@ -2069,7 +2069,7 @@ function exportCSV(){
     return Math.round(v);
   };
 
-  let csv = "Zone,"+METRICS.map(m=>m.ar).join(",")+",Status\n";
+  let csv = "Zone,"+META.map(m=>m.ar).join(",")+",Status\n";
   ZONES.forEach(z=>{
     const rows=sheetCache[z.id]||[];
     const tRow=rows.find(r=>r.date===today);
@@ -2078,14 +2078,14 @@ function exportCSV(){
     const v=tRow.vals||{};
     const p=pRow?.vals||{};
     let dropped=0;
-    METRICS.forEach(m=>{
+    META.forEach(m=>{
       const cur=v[m.k],prv=p[m.k];
       if(cur==null||prv==null) return;
       if(m.better==="high"&&cur<prv) dropped++;
       if(m.better==="low"&&cur>prv)  dropped++;
     });
     const status=dropped===0?"OK":dropped<=2?"Watch":"Needs Action";
-    csv += `"${z.name}",`+METRICS.map(m=>fmtVal(v[m.k],m.fmt)).join(",")+`,${status}\n`;
+    csv += `"${z.name}",`+META.map(m=>fmtVal(v[m.k],m.fmt)).join(",")+`,${status}\n`;
   });
 
   const blob = new Blob([csv],{type:"text/csv"});
