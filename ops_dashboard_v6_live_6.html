@@ -2350,7 +2350,7 @@ function renderExport(){
       <td style="padding:8px 14px;font-weight:700">${escapeHtml(t.title)}</td>
       <td style="padding:8px 14px">${escapeHtml(t.owner||"—")}</td>
       <td style="padding:8px 14px">${areaName}</td>
-      <td style="padding:8px 14px;color:${od?"var(--bad)":"var(--muted)"}">${t.deadline||"—"}${od?" ⚠️":""}</td>
+      <td style="padding:8px 14px;color:${od?"var(--bad)":"var(--muted)"}">${fmtDeadline(t.deadline)}${od?" ⚠️":""}</td>
     </tr>`;
   }).join("");
 
@@ -2467,6 +2467,13 @@ function checkTargetAlerts(){
       setTimeout(()=>el.remove(), 8000);
     }, i*400);
   });
+}
+
+function fmtDeadline(dl){
+  if(!dl) return "—";
+  const d = new Date(dl);
+  if(isNaN(d)) return dl;
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
 }
 
 function setTarget(zid,name,v){
