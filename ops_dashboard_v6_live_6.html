@@ -1556,8 +1556,6 @@ function colKey(h){
   if(/rider accepting time|^accepting time/.test(t)) return "accept_time";
   // Transport Fail
   if(/transport fail/.test(t)) return "transport_fail";
-  // Fail Rate (general)
-  if(/^fail rate$/.test(t)) return "transport_fail";
   // Late Login
   if(/late.?login/.test(t)) return "late_login";
   // No Show
