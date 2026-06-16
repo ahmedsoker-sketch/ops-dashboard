@@ -1961,7 +1961,7 @@ function renderTargets(){
   const weekPicker = targetsViewMode==="week" ? `
     <select onchange="targetsWeekSel=parseInt(this.value);renderTargets()"
       style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit">
-      ${weekNums.map(w=>`<option value="${w}" ${w===targetsWeekSel?"selected":"">Week ${w}</option>`).join("")}
+      ${weekNums.map(w=>`<option value="${w}" ${w===targetsWeekSel?"selected":""}>Week ${w}</option>`).join("")}
     </select>` : "";
 
   const monthPicker = targetsViewMode==="month" ? `
