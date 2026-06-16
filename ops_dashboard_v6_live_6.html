@@ -544,6 +544,7 @@
   <div id="briefingview" class="hidden"></div>
   <div id="targetview" class="hidden"></div>
   <div id="exportview" class="hidden"></div>
+  <div id="analysisview" class="hidden"></div>
 
   <div class="legend">
     <h3>How to read the colors</h3>
@@ -998,6 +999,7 @@ function renderTabs(){
   t.appendChild(mk('briefing','☀️ Briefing'));
   t.appendChild(mk('targets','🎯 Targets'));
   t.appendChild(mk('export','📤 Export'));
+  t.appendChild(mk('analysis','🔬 Analysis'));
 }
 
 function renderOverview(){
@@ -2711,6 +2713,470 @@ function buildWeeklySummaryHTML(){
   </table>`;
 }
 
+/* ════════════════════════════════════════════
+   🔬 ANALYSIS TAB
+   ════════════════════════════════════════════ */
+let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly"
+let deepDiveMetric  = "on_time";
+
+function renderAnalysis(){
+  const av = document.getElementById("analysisview");
+  const today = state.labels.today||"";
+
+  const secBtn = (s,label) => `<button onclick="analysisSection='${s}';renderAnalysis()"
+    style="font-family:inherit;font-size:12px;font-weight:700;padding:7px 16px;border-radius:20px;cursor:pointer;border:1px solid;
+    ${analysisSection===s?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+    ${label}</button>`;
+
+  let html = `
+  <div style="margin-bottom:16px">
+    <div style="font-size:18px;font-weight:800;margin-bottom:12px">🔬 Analysis</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${secBtn("deep-dive","📊 Metric Deep Dive")}
+      ${secBtn("gap-summary","🎯 Gap to Target")}
+      ${secBtn("momentum","📈 Momentum")}
+      ${secBtn("anomaly","🚨 Anomaly Detection")}
+    </div>
+  </div>`;
+
+  if(analysisSection==="deep-dive")       html += buildDeepDive(today);
+  else if(analysisSection==="gap-summary") html += buildGapSummary(today);
+  else if(analysisSection==="momentum")    html += buildMomentum(today);
+  else if(analysisSection==="anomaly")     html += buildAnomaly(today);
+
+  av.innerHTML = html;
+}
+
+/* ── 1. Metric Deep Dive ── */
+let deepDiveMode    = "day";
+let deepDiveWeek    = null;
+let deepDiveMonth   = null;
+let deepDiveDay     = null;
+let deepDiveEditTgt = false;
+
+function buildDeepDive(today){
+  const fmtVal = (v,fmt)=>{
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  const allRows = Object.values(sheetCache).flat();
+  const weekNums  = [...new Set(allRows.map(r=>getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const monthNums = [...new Set(allRows.map(r=>getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const allDaysList = [...new Set(allRows.map(r=>r.date).filter(Boolean))].sort((a,b)=>{
+    const ms={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    const ma=a.match(/([A-Za-z]+)\s+(\d+)/), mb=b.match(/([A-Za-z]+)\s+(\d+)/);
+    if(ma&&mb) return (ms[mb[1]]||0)*100+parseInt(mb[2]) - ((ms[ma[1]]||0)*100+parseInt(ma[2]));
+    return 0;
+  });
+  const monthNames = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  if(!deepDiveDay   && allDaysList.length)  deepDiveDay   = allDaysList[0];
+  if(!deepDiveWeek  && weekNums.length)     deepDiveWeek  = weekNums[0];
+  if(!deepDiveMonth && monthNums.length)    deepDiveMonth = monthNums[0];
+  if(allDaysList.length && !allDaysList.includes(deepDiveDay)) deepDiveDay = allDaysList[0];
+
+  const metricSel = META.map(m=>`<option value="${m.k}" ${m.k===deepDiveMetric?"selected":""}>${m.ar}</option>`).join("");
+  const m = META.find(x=>x.k===deepDiveMetric)||META[0];
+
+  // Period pickers
+  const modeBtn = (mode,label) => `<button onclick="deepDiveMode='${mode}';renderAnalysis()"
+    style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+    ${deepDiveMode===mode?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+    ${label}</button>`;
+
+  const dayPicker = deepDiveMode==="day" ? `
+    <select onchange="deepDiveDay=this.value;renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${allDaysList.map(d=>`<option value="${d}" ${d===deepDiveDay?"selected":""}>${d}</option>`).join("")}
+    </select>` : "";
+
+  const weekPicker = deepDiveMode==="week" ? `
+    <select onchange="deepDiveWeek=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${weekNums.map(w=>`<option value="${w}" ${w===deepDiveWeek?"selected":""}>Week ${w}</option>`).join("")}
+    </select>` : "";
+
+  const monthPicker = deepDiveMode==="month" ? `
+    <select onchange="deepDiveMonth=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${monthNums.map(mo=>`<option value="${mo}" ${mo===deepDiveMonth?"selected":""}>${monthNames[mo]||mo}</option>`).join("")}
+    </select>` : "";
+
+  // Collect zone values based on mode
+  const zvals = [];
+  ZONES.forEach(z=>{
+    const rows = sheetCache[z.id]||[];
+    let v = null;
+    if(deepDiveMode==="day"){
+      const row = rows.find(r=>r.date===deepDiveDay);
+      v = row?.vals?.[m.k];
+    } else if(deepDiveMode==="week"){
+      const wRows = rows.filter(r=>getWkFromISO(getISOFromRow(r))===deepDiveWeek);
+      const vals = wRows.map(r=>r.vals?.[m.k]).filter(x=>x!=null);
+      v = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    } else {
+      const mRows = rows.filter(r=>getMoFromISO(getISOFromRow(r))===deepDiveMonth);
+      const vals = mRows.map(r=>r.vals?.[m.k]).filter(x=>x!=null);
+      v = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    }
+    if(v==null) return;
+    const zt = getMetricTarget(m.k, z.id);
+    const good = zt!=null ? (m.better==="high" ? v>=zt : v<=zt) : null;
+    zvals.push({zid:z.id, name:z.name, v, zt, good});
+  });
+
+  zvals.sort((a,b)=> m.better==="high" ? b.v-a.v : a.v-b.v);
+
+  const periodLabel = deepDiveMode==="day" ? deepDiveDay : deepDiveMode==="week" ? "Week "+deepDiveWeek : monthNames[deepDiveMonth]||"";
+
+  if(!zvals.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No data available</div></div>`;
+
+  const maxVal = Math.max(...zvals.map(z=>z.v));
+
+  const bars = zvals.map((z,i)=>{
+    const pct = maxVal>0 ? (z.v/maxVal)*100 : 0;
+    const barColor = z.good===true?"var(--good)":z.good===false?"var(--bad)":"var(--accent)";
+    const tgtCell = deepDiveEditTgt
+      ? `<input type="number" value="${z.zt!=null?z.zt:""}" placeholder="target"
+          onchange="metricTargets['${z.zid}|${m.k}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderAnalysis()"
+          style="width:75px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:11px;font-family:inherit;background:var(--card);color:var(--ink)">`
+      : `<div style="font-size:11px;color:var(--muted);width:75px">${z.zt!=null?"tgt: "+fmtVal(z.zt,m.fmt):"no target"}</div>`;
+    return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:800;color:var(--muted);width:18px;text-align:right">${i+1}</div>
+      <div style="font-size:13px;font-weight:700;width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(z.name)}</div>
+      <div style="flex:1;background:var(--line);border-radius:6px;height:22px;position:relative;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:6px;transition:width .5s;display:flex;align-items:center;padding-left:8px">
+          <span style="font-size:11px;font-weight:800;color:#fff;white-space:nowrap">${fmtVal(z.v,m.fmt)}</span>
+        </div>
+      </div>
+      ${tgtCell}
+    </div>`;
+  }).join("");
+
+  return `<div class="panel">
+    <div class="ptitle" style="flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:15px">📊 Metric Deep Dive — ${periodLabel}</h2>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select onchange="deepDiveMetric=this.value;renderAnalysis()"
+          style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+          ${metricSel}
+        </select>
+        ${modeBtn("day","📅 Day")}
+        ${modeBtn("week","📆 Week")}
+        ${modeBtn("month","🗓️ Month")}
+        ${dayPicker}${weekPicker}${monthPicker}
+        <button onclick="deepDiveEditTgt=!deepDiveEditTgt;renderAnalysis()"
+          style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+          ${deepDiveEditTgt?"background:#1a1a2e;color:#fff;border-color:#1a1a2e":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+          ${deepDiveEditTgt?"🔒 Lock":"✏️ Edit Targets"}
+        </button>
+      </div>
+    </div>
+    <div style="padding:16px">${bars}</div>
+  </div>`;
+}
+
+/* ── 2. Gap to Target Summary ── */
+let gapMode    = "day";
+let gapWeek    = null;
+let gapMonth   = null;
+let gapDay     = null;
+
+function buildGapSummary(today){
+  const fmtVal = (v,fmt)=>{
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  const allRows   = Object.values(sheetCache).flat();
+  const weekNums  = [...new Set(allRows.map(r=>getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const monthNums = [...new Set(allRows.map(r=>getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a,b)=>b-a);
+  const allDaysList = [...new Set(allRows.map(r=>r.date).filter(Boolean))].sort((a,b)=>{
+    const ms={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    const ma=a.match(/([A-Za-z]+)\s+(\d+)/), mb=b.match(/([A-Za-z]+)\s+(\d+)/);
+    if(ma&&mb) return (ms[mb[1]]||0)*100+parseInt(mb[2]) - ((ms[ma[1]]||0)*100+parseInt(ma[2]));
+    return 0;
+  });
+  const monthNames = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  if(!gapDay   && allDaysList.length) gapDay   = allDaysList[0];
+  if(!gapWeek  && weekNums.length)    gapWeek  = weekNums[0];
+  if(!gapMonth && monthNums.length)   gapMonth = monthNums[0];
+  if(allDaysList.length && !allDaysList.includes(gapDay)) gapDay = allDaysList[0];
+
+  const modeBtn = (mode,label) => `<button onclick="gapMode='${mode}';renderAnalysis()"
+    style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+    ${gapMode===mode?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
+    ${label}</button>`;
+
+  const dayPicker = gapMode==="day" ? `
+    <select onchange="gapDay=this.value;renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${allDaysList.map(d=>`<option value="${d}" ${d===gapDay?"selected":""}>${d}</option>`).join("")}
+    </select>` : "";
+
+  const weekPicker = gapMode==="week" ? `
+    <select onchange="gapWeek=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${weekNums.map(w=>`<option value="${w}" ${w===gapWeek?"selected":""}>Week ${w}</option>`).join("")}
+    </select>` : "";
+
+  const monthPicker = gapMode==="month" ? `
+    <select onchange="gapMonth=parseInt(this.value);renderAnalysis()"
+      style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${monthNums.map(mo=>`<option value="${mo}" ${mo===gapMonth?"selected":""}>${monthNames[mo]||mo}</option>`).join("")}
+    </select>` : "";
+
+  const periodLabel = gapMode==="day" ? gapDay : gapMode==="week" ? "Week "+gapWeek : monthNames[gapMonth]||"";
+
+  let headerCells = META.map(m=>`<th style="text-align:center;font-size:11px;padding:8px 6px;white-space:nowrap">${m.ar}</th>`).join("");
+  let rows = "";
+
+  ZONES.forEach(z=>{
+    const zrows = sheetCache[z.id]||[];
+    let v = {};
+
+    if(gapMode==="day"){
+      const row = zrows.find(r=>r.date===gapDay);
+      if(!row) return;
+      v = row.vals||{};
+    } else if(gapMode==="week"){
+      const wRows = zrows.filter(r=>getWkFromISO(getISOFromRow(r))===gapWeek);
+      if(!wRows.length) return;
+      v = getAvgVals(wRows);
+    } else {
+      const mRows = zrows.filter(r=>getMoFromISO(getISOFromRow(r))===gapMonth);
+      if(!mRows.length) return;
+      v = getAvgVals(mRows);
+    }
+
+    let scored=0, total=0;
+    const cells = META.map(m=>{
+      const cur = v[m.k];
+      const tgt = getMetricTarget(m.k, z.id);
+      if(cur==null) return `<td style="text-align:center;padding:8px 6px;color:var(--muted);font-size:12px">—</td>`;
+      if(tgt==null) return `<td style="text-align:center;padding:8px 6px;font-size:12px">${fmtVal(cur,m.fmt)}</td>`;
+      total++;
+      const good = m.better==="high" ? cur>=tgt : cur<=tgt;
+      if(good) scored++;
+      const gap = m.better==="high" ? cur-tgt : tgt-cur;
+      const gapStr = (gap>=0?"+":"")+fmtVal(gap,m.fmt);
+      const bg = good?"var(--good-bg)":"var(--bad-bg)";
+      const clr = good?"var(--good)":"var(--bad)";
+      return `<td style="text-align:center;padding:8px 6px;background:${bg};font-size:12px;font-weight:700;color:${clr}">${gapStr}</td>`;
+    }).join("");
+
+    const score = total>0?Math.round((scored/total)*100):null;
+    const sc = score==null?"var(--muted)":score>=80?"var(--good)":score>=50?"var(--watch)":"var(--bad)";
+
+    rows += `<tr>
+      <td style="padding:8px 10px;font-weight:800;font-size:13px;white-space:nowrap">${z.name}</td>
+      ${cells}
+      <td style="text-align:center;padding:8px 6px;font-weight:800;color:${sc}">${score!=null?score+"/100":"—"}</td>
+    </tr>`;
+  });
+
+  if(!rows) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No data available</div></div>`;
+
+  return `<div class="panel" style="overflow-x:auto">
+    <div class="ptitle" style="flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:15px">🎯 Gap to Target — ${periodLabel}</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${modeBtn("day","📅 Day")}
+        ${modeBtn("week","📆 Week")}
+        ${modeBtn("month","🗓️ Month")}
+        ${dayPicker}${weekPicker}${monthPicker}
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);padding:0 16px 10px">Green = on target · Red = off target · number shows gap</div>
+    <table style="min-width:700px">
+      <thead><tr>
+        <th style="padding:8px 10px;text-align:left">Zone</th>
+        ${headerCells}
+        <th style="text-align:center;font-size:11px;padding:8px 6px">Score</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+/* ── 3. Day-over-Day Momentum ── */
+function buildMomentum(today){
+  const allDates = [...new Set(Object.values(sheetCache).flat().map(r=>r.date).filter(Boolean))].sort((a,b)=>{
+    const ms={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    const ma=a.match(/([A-Za-z]+)\s+(\d+)/), mb=b.match(/([A-Za-z]+)\s+(\d+)/);
+    if(ma&&mb) return (ms[mb[1]]||0)*100+parseInt(mb[2]) - ((ms[ma[1]]||0)*100+parseInt(ma[2]));
+    return 0;
+  });
+
+  const last7 = allDates.slice(0,7).reverse();
+  if(last7.length < 2) return `<div class="panel"><div style="padding:20px;color:var(--muted)">Need at least 2 days of data.</div></div>`;
+
+  const rows = ZONES.map(z=>{
+    const zrows = sheetCache[z.id]||[];
+    // Score per day
+    const dayScores = last7.map(d=>{
+      const row = zrows.find(r=>r.date===d);
+      if(!row) return null;
+      const v = row.vals||{};
+      let sc=0, tot=0;
+      META.forEach(m=>{
+        const tgt=getMetricTarget(m.k,z.id), cur=v[m.k];
+        if(cur==null||tgt==null) return;
+        tot++;
+        if(m.better==="high"?cur>=tgt:cur<=tgt) sc++;
+      });
+      return tot>0?Math.round((sc/tot)*100):null;
+    });
+
+    const validScores = dayScores.filter(s=>s!=null);
+    if(validScores.length < 2) return null;
+
+    const latest = validScores[validScores.length-1];
+    const prev   = validScores[validScores.length-2];
+    const trend  = latest - prev;
+    const arrow  = trend>5?"↑↑":trend>0?"↑":trend<-5?"↓↓":trend<0?"↓":"→";
+    const arrowClr = trend>0?"var(--good)":trend<0?"var(--bad)":"var(--muted)";
+
+    // Mini sparkline
+    const maxS = Math.max(...validScores);
+    const sparkBars = last7.map((d,i)=>{
+      const s = dayScores[i];
+      if(s==null) return `<div style="flex:1;background:var(--line);border-radius:2px;height:30px"></div>`;
+      const h = maxS>0?(s/maxS)*100:0;
+      const c = s>=80?"var(--good)":s>=50?"var(--watch)":"var(--bad)";
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="width:100%;background:var(--line);border-radius:2px;height:30px;position:relative;overflow:hidden">
+          <div style="position:absolute;bottom:0;width:100%;height:${h}%;background:${c};border-radius:2px"></div>
+        </div>
+        <div style="font-size:9px;color:var(--muted)">${d.replace(/[A-Za-z]+ /,"")}</div>
+      </div>`;
+    }).join("");
+
+    return {name:z.name, latest, trend, arrow, arrowClr, sparkBars};
+  }).filter(Boolean);
+
+  rows.sort((a,b)=>b.trend-a.trend);
+
+  const rowsHTML = rows.map(r=>`
+    <div class="panel" style="margin-bottom:10px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="min-width:150px">
+          <div style="font-size:13px;font-weight:800">${escapeHtml(r.name)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            Score: <b>${r.latest}/100</b>
+            <span style="color:${r.arrowClr};font-weight:800;margin-left:6px">${r.arrow} ${r.trend>0?"+":""}${r.trend}pts</span>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;gap:3px;align-items:flex-end">${r.sparkBars}</div>
+      </div>
+    </div>`).join("");
+
+  return `<div style="margin-bottom:14px">
+    <div class="panel" style="padding:12px 16px;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:4px">📈 Day-over-Day Momentum</div>
+      <div style="font-size:12px;color:var(--muted)">Last ${last7.length} days · Sorted by improvement</div>
+    </div>
+    ${rowsHTML}
+  </div>`;
+}
+
+/* ── 4. Anomaly Detection ── */
+function buildAnomaly(today){
+  const fmtVal = (v,fmt)=>{
+    if(v==null) return "—";
+    if(fmt==="pct") return v.toFixed(1)+"%";
+    if(fmt==="d2")  return v.toFixed(2);
+    if(fmt==="d1")  return v.toFixed(1);
+    return Math.round(v).toLocaleString();
+  };
+
+  const anomalies = [];
+
+  ZONES.forEach(z=>{
+    const zrows = sheetCache[z.id]||[];
+    const todayRow = zrows.find(r=>r.date===today);
+    if(!todayRow) return;
+    const todayVals = todayRow.vals||{};
+
+    META.forEach(m=>{
+      const cur = todayVals[m.k];
+      if(cur==null) return;
+
+      // Get historical values (last 14 days)
+      const hist = zrows
+        .filter(r=>r.date!==today)
+        .slice(0,14)
+        .map(r=>r.vals?.[m.k])
+        .filter(v=>v!=null);
+
+      if(hist.length < 3) return;
+
+      const mean = hist.reduce((a,b)=>a+b,0)/hist.length;
+      const std  = Math.sqrt(hist.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/hist.length);
+      if(std < 0.01) return;
+
+      const zScore = Math.abs((cur - mean) / std);
+      if(zScore > 2){
+        const dir = cur > mean ? "spike" : "drop";
+        const pctChange = Math.round(Math.abs((cur-mean)/mean)*100);
+        anomalies.push({
+          zone: z.name,
+          metric: m.ar,
+          cur, mean, zScore: zScore.toFixed(1),
+          dir, pctChange, fmt: m.fmt,
+          severity: zScore > 3 ? "high" : "medium"
+        });
+      }
+    });
+  });
+
+  anomalies.sort((a,b)=>b.zScore-a.zScore);
+
+  if(!anomalies.length) return `<div class="panel">
+    <div class="ptitle"><h2 style="font-size:15px">🚨 Anomaly Detection</h2></div>
+    <div style="padding:20px;text-align:center;color:var(--good);font-size:14px;font-weight:700">✅ No anomalies detected today — all metrics within normal range!</div>
+  </div>`;
+
+  const rows = anomalies.map(a=>{
+    const isHigh = a.severity==="high";
+    const bc  = a.dir==="drop"?"var(--bad)":"var(--watch)";
+    const bbg = a.dir==="drop"?"var(--bad-bg)":"var(--watch-bg)";
+    const icon = a.dir==="drop" ? "📉" : "📈";
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:${isHigh?bbg:""}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">${icon}</span>
+        <div>
+          <div style="font-size:13px;font-weight:800">${escapeHtml(a.zone)} — ${escapeHtml(a.metric)}</div>
+          <div style="font-size:12px;color:var(--muted)">
+            Today: <b style="color:${bc}">${fmtVal(a.cur,a.fmt)}</b>
+            · Avg: ${fmtVal(a.mean,a.fmt)}
+            · <span style="color:${bc}">${a.dir==="drop"?"-":"+"}${a.pctChange}% from normal</span>
+          </div>
+        </div>
+      </div>
+      <span class="chip" style="background:${bbg};color:${bc};border-color:${bc};font-size:11px">
+        ${isHigh?"🔴 High":"🟡 Medium"} · z=${a.zScore}
+      </span>
+    </div>`;
+  }).join("");
+
+  return `<div class="panel">
+    <div class="ptitle">
+      <h2 style="font-size:15px">🚨 Anomaly Detection — ${today}</h2>
+      <span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">${anomalies.length} anomaly${anomalies.length!==1?"ies":""}</span>
+    </div>
+    ${rows}
+  </div>`;
+}
+
 function setTarget(zid,name,v){
   state.targets[zid+"|"+name]=v; saveState();
   if(curTab!=="overview") renderZone(curTab);
@@ -3466,13 +3932,14 @@ function render(){
   const zv=document.getElementById("zoneview");
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
-  ["taskview","briefingview","targetview","exportview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
+  ["taskview","briefingview","targetview","exportview","analysisview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
   if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); checkTargetAlerts(); checkActionReminders(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
   else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
   else if(curTab==="targets"){ document.getElementById("targetview").classList.remove("hidden"); renderTargets(); }
   else if(curTab==="export"){ document.getElementById("exportview").classList.remove("hidden"); renderExport(); }
+  else if(curTab==="analysis"){ document.getElementById("analysisview").classList.remove("hidden"); renderAnalysis(); }
   else{ zv.classList.remove("hidden"); renderZone(curTab); }
 }
 
