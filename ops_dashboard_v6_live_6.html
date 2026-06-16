@@ -3274,9 +3274,12 @@ async function sendTaskEmailNotification(task){
   try{
     await fetch(SCRIPT_URL, {
       method:"POST",
+      mode:"no-cors",
       body: JSON.stringify({type:"sendTaskEmail", task})
     });
-  }catch(e){}
+  }catch(e){
+    console.log("Email send error:", e);
+  }
 }
 
 function setTarget(zid,name,v){
