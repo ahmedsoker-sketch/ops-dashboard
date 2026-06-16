@@ -317,15 +317,6 @@
   body.dark .tgt-accordion { background: var(--card); }
   body.dark .tgt-header:hover { background: #1e2130; }
 
-  #darkToggle {
-    font-size:18px;
-    padding:6px 10px;
-    border-radius:10px;
-    border:1px solid var(--line);
-    background:var(--flat-bg);
-    cursor:pointer;
-    transition: all .2s;
-  }
   #darkToggle:hover { background: var(--line); }
 </style>
 </head>
@@ -333,10 +324,7 @@
 <div class="wrap">
   <header class="top" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:4px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div style="display:flex;align-items:center;gap:12px">
-        <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
-        <button id="darkToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
-      </div>
+      <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
       <div class="vmode" id="vmodeBar">
         <button class="active" onclick="setViewMode('day')" id="vDay">📅 Day</button>
         <button onclick="setViewMode('week')" id="vWeek">📆 Week</button>
@@ -372,6 +360,7 @@
         </label>
       </div>
       <button id="editBtn" onclick="toggleEdit()" style="font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)">✎ Edit</button>
+      <button id="darkToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode" style="font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)">🌙</button>
     </div>
   </header>
 
