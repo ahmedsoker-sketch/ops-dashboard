@@ -1011,7 +1011,7 @@ function renderOverview(){
     // Target score
     let tScored=0, tTotal=0;
     META.forEach(m=>{
-      const tgt=getMetricTarget(m.k);
+      const tgt=getMetricTarget(m.k, z.id);
       const r=evalMetric(z.id,m);
       if(r.t==null||tgt==null) return;
       tTotal++;
@@ -1821,7 +1821,7 @@ function renderBriefing(){
     let offTarget = 0;
     META.forEach(m=>{
       const cur=v[m.k];
-      const tgt=getMetricTarget(m.k);
+      const tgt=getMetricTarget(m.k, z.id);
       if(cur==null||tgt==null) return;
       const good = m.better==="high" ? cur>=tgt : cur<=tgt;
       if(!good) offTarget++;
@@ -2009,7 +2009,10 @@ async function saveMetricTargets(){
   }catch(e){}
 }
 
-function getMetricTarget(k){
+function getMetricTarget(k, zid){
+  // Per-zone target first: "zid|metric"
+  if(zid && metricTargets[zid+"|"+k]!=null) return metricTargets[zid+"|"+k];
+  // Global target fallback
   if(metricTargets[k]!=null) return metricTargets[k];
   return DEFAULT_TARGETS[k];
 }
@@ -2136,7 +2139,7 @@ function renderTargets(){
     // Calculate score
     let scored=0, total=0;
     META.forEach(m=>{
-      const tgt=getMetricTarget(m.k);
+      const tgt=getMetricTarget(m.k, z.id);
       const cur=v[m.k];
       if(cur==null||tgt==null) return;
       total++;
@@ -2150,7 +2153,7 @@ function renderTargets(){
 
     let metricRows = "";
     META.forEach(m=>{
-      const tgt = getMetricTarget(m.k);
+      const tgt = getMetricTarget(m.k, z.id);
       const cur = v[m.k];
       if(cur==null) return;
 
@@ -2163,10 +2166,11 @@ function renderTargets(){
 
       const gap = tgt!=null ? (m.better==="high" ? cur-tgt : tgt-cur) : null;
       const gapStr = gap!=null ? (gap>=0?"+":"")+fmtVal(gap, m.fmt) : "—";
+      const zoneKey = z.id+"|"+m.k;
 
       const targetCell = targetsEditMode
         ? `<input type="number" value="${tgt!=null?tgt:""}" placeholder="Set target"
-            onchange="metricTargets['${m.k}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderTargets()"
+            onchange="metricTargets['${zoneKey}']=this.value?parseFloat(this.value):null;saveMetricTargets();renderTargets()"
             style="width:90px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit">`
         : `<span style="font-size:13px;font-weight:700;color:var(--ink)">${tgt!=null?fmtVal(tgt,m.fmt):"—"}</span>`;
 
@@ -2310,7 +2314,7 @@ function renderExport(){
 
     let tScored2=0, tTotal2=0;
     META.forEach(m=>{
-      const tgt=getMetricTarget(m.k), cur=v[m.k];
+      const tgt=getMetricTarget(m.k, z.id), cur=v[m.k];
       if(cur==null||tgt==null) return;
       tTotal2++;
       if(m.better==="high"?cur>=tgt:cur<=tgt) tScored2++;
@@ -2443,7 +2447,7 @@ function checkTargetAlerts(){
     let offCount=0;
     const offMetrics=[];
     META.forEach(m=>{
-      const tgt=getMetricTarget(m.k), cur=v[m.k];
+      const tgt=getMetricTarget(m.k, z.id), cur=v[m.k];
       if(cur==null||tgt==null) return;
       const good = m.better==="high" ? cur>=tgt : cur<=tgt;
       if(!good){ offCount++; offMetrics.push(m.ar); }
