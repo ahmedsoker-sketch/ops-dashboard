@@ -735,7 +735,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1229,8 +1229,8 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
-const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec?action=getWH";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec?action=getWH";
 
 /* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
@@ -2016,7 +2016,7 @@ let metricTargets = JSON.parse(localStorage.getItem("metricTargets")||"{}");
 
 async function loadTargets(){
   try{
-    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec?action=getTargets";
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec?action=getTargets";
     const resp = await fetch(TARGETS_URL, {cache:"no-store"});
     if(!resp.ok) return;
     const text = await resp.text();
@@ -2032,7 +2032,7 @@ async function saveMetricTargets(){
   localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
   // Save to sheet
   try{
-    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
     await fetch(TARGETS_URL,{
       method:"POST",
       body:JSON.stringify({type:"saveTargets", targets:metricTargets})
@@ -3268,7 +3268,7 @@ const TEAM_MEMBERS = [
   {name:"Ahmed Fayez",    email:"ahmed.fayez@talabat.com"},
   {name:"Mohamed Beshary",email:"mohamed.hassan@talabat.com"},
 ];
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxERyXzWOxP2r_QezAHKOaP6wfSiP8QlUMUaYWQdjwsiOmoLZhrnSso1VFo6vcdzLhk/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
 
 async function sendTaskEmailNotification(task){
   try{
