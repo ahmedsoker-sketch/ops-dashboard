@@ -3123,8 +3123,12 @@ function buildAnomaly(today){
       const std  = Math.sqrt(hist.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/hist.length);
       if(std < 0.01) return;
 
-      const zScore = Math.abs((cur - mean) / std);
+      const rawZ = (cur - mean) / std;
+      const zScore = Math.abs(rawZ);
       if(zScore > 2){
+        // Only flag BAD anomalies — improvement is not an anomaly
+        const isBad = (m.better==="high" && cur < mean) || (m.better==="low" && cur > mean);
+        if(!isBad) return;
         const dir = cur > mean ? "spike" : "drop";
         const pctChange = Math.round(Math.abs((cur-mean)/mean)*100);
         anomalies.push({
