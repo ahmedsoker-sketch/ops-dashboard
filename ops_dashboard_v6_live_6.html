@@ -268,35 +268,6 @@
 }
 .tgt-body.open { max-height:1000px; }
 
-/* Target Alert Notification */
-#tgt-notif {
-  position:fixed;
-  top:16px;
-  right:16px;
-  z-index:9999;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  max-width:320px;
-  pointer-events:none;
-}
-.tgt-notif-item {
-  background:#1a1a2e;
-  color:#fff;
-  border-radius:12px;
-  padding:12px 16px;
-  font-size:13px;
-  font-weight:600;
-  box-shadow:0 4px 20px rgba(0,0,0,.25);
-  animation: notifSlide .3s ease;
-  pointer-events:all;
-  cursor:pointer;
-}
-.tgt-notif-item:hover { opacity:.9; }
-@keyframes notifSlide {
-  from { transform:translateX(120%); opacity:0; }
-  to   { transform:translateX(0);    opacity:1; }
-}
 
   body.dark {
     --bg:#0f1117; --card:#1a1d27; --ink:#e8eaf0; --muted:#8b909e; --line:#2a2d3a;
@@ -536,7 +507,6 @@
 
   <nav class="tabs" id="tabs"></nav>
 
-  <div id="tgt-notif"></div>
   <div id="overview"></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
@@ -1883,7 +1853,7 @@ function renderBriefing(){
 
   // Sort by most metrics off target
   zoneStats.sort((a,b)=>b.offTarget-a.offTarget);
-  const worst3 = zoneStats.filter(z=>z.offTarget>0).slice(0,5);
+  const worst3 = zoneStats.slice(0,5);
 
   // Pending actions
   const pendingActions = [];
@@ -2723,7 +2693,9 @@ function buildWeeklySummaryHTML(){
 /* ════════════════════════════════════════════
    🔬 ANALYSIS TAB
    ════════════════════════════════════════════ */
-let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly"
+let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly" | "3pl"
+let tplZoneFilter = "all";
+let tplDateFilter = null;
 let deepDiveMetric  = "on_time";
 
 function renderAnalysis(){
@@ -2743,6 +2715,7 @@ function renderAnalysis(){
       ${secBtn("gap-summary","🎯 Gap to Target")}
       ${secBtn("momentum","📈 Momentum")}
       ${secBtn("anomaly","🚨 Anomaly Detection")}
+      ${secBtn("3pl","🚚 3PL Analysis")}
     </div>
   </div>`;
 
@@ -2750,6 +2723,7 @@ function renderAnalysis(){
   else if(analysisSection==="gap-summary") html += buildGapSummary(today);
   else if(analysisSection==="momentum")    html += buildMomentum(today);
   else if(analysisSection==="anomaly")     html += buildAnomaly(today);
+  else if(analysisSection==="3pl")         html += build3PLAnalysis(today);
 
   av.innerHTML = html;
 }
@@ -3280,6 +3254,194 @@ async function sendTaskEmailNotification(task){
   }catch(e){
     console.log("Email send error:", e);
   }
+}
+
+/* ════════════════════════════════════════════
+   🚚 3PL ANALYSIS
+   ════════════════════════════════════════════ */
+function build3PLAnalysis(today){
+  const fmtH = h => h!=null ? Math.round(h).toLocaleString()+"h" : "—";
+
+  // Build all 3PL data across all zones
+  const allDaysList = [...new Set(
+    Object.values(whCache).flatMap(zd =>
+      Object.values(zd).length ? Array.from({length: whDates.length}, (_,i)=>i) : []
+    )
+  )].map(i=>whDates[i]).filter(Boolean);
+
+  // Convert whDates to readable labels
+  const dateLabels = whDates.map(d=>{
+    const m = d.match(/([A-Za-z]+)\s+(\d+)/);
+    if(m) return m[1].slice(0,3)+" "+parseInt(m[2]);
+    const ms = d.match(/(\d+)\/(\d+)/);
+    if(ms){
+      const months=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      return (months[parseInt(ms[1])]||ms[1])+" "+parseInt(ms[2]);
+    }
+    return d;
+  });
+
+  // Last 7 dates
+  const last7idx = [...Array(Math.min(7, whDates.length)).keys()].map(i=>whDates.length-1-i).reverse();
+
+  // Zone filter options
+  const zoneOpts = `<option value="all">All Zones</option>`
+    + ZONES.map(z=>`<option value="${z.id}" ${tplZoneFilter===z.id?"selected":""}>${z.name}</option>`).join("");
+
+  // Date filter options
+  const dateOpts = `<option value="">Latest Day</option>`
+    + dateLabels.map((d,i)=>`<option value="${i}" ${tplDateFilter==i?"selected":""}>${d}</option>`).join("");
+
+  const filterBar = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+    <select onchange="tplZoneFilter=this.value;renderAnalysis()"
+      style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${zoneOpts}
+    </select>
+    <select onchange="tplDateFilter=this.value===''?null:parseInt(this.value);renderAnalysis()"
+      style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
+      ${dateOpts}
+    </select>
+  </div>`;
+
+  // Collect 3PL data
+  const tplMap = {}; // {name: {zid, hrs:[], target, avg, consistency}}
+
+  const filteredZones = tplZoneFilter==="all" ? ZONES : ZONES.filter(z=>z.id===tplZoneFilter);
+
+  filteredZones.forEach(z=>{
+    const zd = whCache[z.id];
+    if(!zd) return;
+    Object.entries(zd).forEach(([name, hoursArr])=>{
+      const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
+      const key = name + (tplZoneFilter==="all" ? " ("+z.name+")" : "");
+      tplMap[key] = {name, zid:z.id, zoneName:z.name, hoursArr, target:tgt};
+    });
+  });
+
+  if(!Object.keys(tplMap).length){
+    return `<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available.</div></div>`;
+  }
+
+  // ── 1. PERFORMANCE (selected day) ──
+  const dayIdx = tplDateFilter!=null ? tplDateFilter : (whDates.length-1);
+  const dayLabel = dateLabels[dayIdx] || "Latest";
+
+  const perfData = Object.entries(tplMap).map(([key,d])=>{
+    const hrs = d.hoursArr[dayIdx]!=null ? Math.round(d.hoursArr[dayIdx]) : null;
+    const tgt = d.target;
+    const good = (hrs!=null&&tgt!=null) ? hrs>=tgt : null;
+    const gap  = (hrs!=null&&tgt!=null) ? hrs-tgt : null;
+    return {key, hrs, tgt, good, gap, zid:d.zid, zoneName:d.zoneName};
+  }).filter(d=>d.hrs!=null);
+
+  // Sort by gap (best first)
+  perfData.sort((a,b)=>{
+    if(a.good===true&&b.good!==true) return -1;
+    if(b.good===true&&a.good!==true) return 1;
+    return (b.gap||0)-(a.gap||0);
+  });
+
+  const maxHrs = Math.max(...perfData.map(d=>d.hrs||0), 1);
+  const perfRows = perfData.map((d,i)=>{
+    const pct = (d.hrs/maxHrs)*100;
+    const clr = d.good===true?"var(--good)":d.good===false?"var(--bad)":"var(--accent)";
+    const gapStr = d.gap!=null ? `<span style="color:${clr};font-size:11px;font-weight:700">${d.gap>=0?"+":""}${Math.round(d.gap)}h vs target</span>` : "";
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="font-size:11px;color:var(--muted);width:16px;text-align:right">${i+1}</div>
+      <div style="font-size:12px;font-weight:700;width:${tplZoneFilter==="all"?"180px":"140px"};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.key)}</div>
+      <div style="flex:1;background:var(--line);border-radius:5px;height:20px;position:relative;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${clr};border-radius:5px;display:flex;align-items:center;padding-left:6px;transition:width .5s">
+          <span style="font-size:11px;font-weight:800;color:#fff;white-space:nowrap">${d.hrs.toLocaleString()}h</span>
+        </div>
+      </div>
+      <div style="width:110px;font-size:11px">${gapStr}</div>
+    </div>`;
+  }).join("");
+
+  // ── 2. RANKING (avg of last 7 days vs target) ──
+  const rankData = Object.entries(tplMap).map(([key,d])=>{
+    const vals = last7idx.map(i=>d.hoursArr[i]).filter(v=>v!=null&&v>0);
+    const avg = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+    const tgt = d.target;
+    const score = (avg!=null&&tgt!=null) ? Math.min(100,Math.round((avg/tgt)*100)) : null;
+    return {key, avg, tgt, score, zid:d.zid};
+  }).filter(d=>d.avg!=null);
+
+  rankData.sort((a,b)=>(b.score||0)-(a.score||0));
+
+  const rankRows = rankData.map((d,i)=>{
+    const sc = d.score||0;
+    const clr = sc>=100?"var(--good)":sc>=70?"var(--watch)":"var(--bad)";
+    const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
+    return `<tr>
+      <td style="padding:8px 10px;font-size:12px;font-weight:700">${medal} ${i+1}</td>
+      <td style="padding:8px 10px;font-size:12px">${escapeHtml(d.key)}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:12px">${d.avg!=null?d.avg.toLocaleString()+"h":"—"}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:12px;color:var(--muted)">${d.tgt!=null?d.tgt.toLocaleString()+"h":"—"}</td>
+      <td style="padding:8px 10px;text-align:center">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:var(--line);border-radius:4px;height:8px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(sc,100)}%;background:${clr};border-radius:4px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:800;color:${clr};min-width:36px">${sc}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+
+  // ── 3. CONSISTENCY (std deviation last 7 days) ──
+  const constData = Object.entries(tplMap).map(([key,d])=>{
+    const vals = last7idx.map(i=>d.hoursArr[i]).filter(v=>v!=null&&v>0);
+    if(vals.length < 3) return null;
+    const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const std = Math.sqrt(vals.map(v=>(v-avg)**2).reduce((a,b)=>a+b,0)/vals.length);
+    const cv = avg>0 ? Math.round((std/avg)*100) : 100; // coefficient of variation %
+    const label = cv<=10?"🟢 Very Stable":cv<=20?"🟡 Stable":cv<=35?"🟠 Variable":"🔴 Unstable";
+    return {key, avg:Math.round(avg), std:Math.round(std), cv, label};
+  }).filter(Boolean);
+
+  constData.sort((a,b)=>a.cv-b.cv);
+
+  const constRows = constData.map(d=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--line)">
+      <div>
+        <div style="font-size:12px;font-weight:700">${escapeHtml(d.key)}</div>
+        <div style="font-size:11px;color:var(--muted)">Avg: ${d.avg.toLocaleString()}h · Variation: ±${d.std}h</div>
+      </div>
+      <div style="font-size:12px;font-weight:700">${d.label} (${d.cv}%)</div>
+    </div>`).join("");
+
+  return `<div>
+    ${filterBar}
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="ptitle"><h2 style="font-size:15px">📊 Performance — ${dayLabel}</h2>
+        <div style="font-size:12px;color:var(--muted)">Hours vs target · sorted best first</div>
+      </div>
+      <div style="padding:16px">${perfRows||`<div style="color:var(--muted)">No data</div>`}</div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;overflow-x:auto">
+      <div class="ptitle"><h2 style="font-size:15px">🏆 Ranking — Last 7 Days Avg</h2></div>
+      <table style="min-width:500px">
+        <thead><tr>
+          <th style="padding:8px 10px">#</th>
+          <th style="padding:8px 10px">3PL</th>
+          <th style="text-align:center;padding:8px 10px">Avg WH</th>
+          <th style="text-align:center;padding:8px 10px">Target</th>
+          <th style="padding:8px 10px">Achievement</th>
+        </tr></thead>
+        <tbody>${rankRows||`<tr><td colspan="5" style="padding:14px;color:var(--muted)">No data</td></tr>`}</tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle"><h2 style="font-size:15px">📉 Consistency — Last 7 Days</h2>
+        <div style="font-size:12px;color:var(--muted)">Lower variation = more reliable</div>
+      </div>
+      ${constRows||`<div style="padding:14px;color:var(--muted)">Not enough data</div>`}
+    </div>
+  </div>`;
 }
 
 function setTarget(zid,name,v){
@@ -4038,7 +4200,7 @@ function render(){
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
   ["taskview","briefingview","targetview","exportview","analysisview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
-  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); checkTargetAlerts(); checkActionReminders(); }
+  if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
   else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
