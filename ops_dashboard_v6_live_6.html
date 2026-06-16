@@ -1955,7 +1955,9 @@ function renderTargets(){
     if(ma&&mb) return (ms[mb[1]]||0)*100+parseInt(mb[2]) - ((ms[ma[1]]||0)*100+parseInt(ma[2]));
     return 0;
   });
-  if(!targetsDaySel && allDaysList.length) targetsDaySel = allDaysList[0];
+  if(!targetsDaySel) targetsDaySel = allDaysList[0]||today;
+  // If saved day not in list anymore, reset to first available
+  if(allDaysList.length && !allDaysList.includes(targetsDaySel)) targetsDaySel = allDaysList[0];
   const activeDay = targetsViewMode==="day" ? (targetsDaySel||today) : today;
 
   // Period label
