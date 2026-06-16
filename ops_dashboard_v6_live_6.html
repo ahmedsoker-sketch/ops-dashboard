@@ -289,6 +289,54 @@
   body.dark .tgt-header:hover { background: #1e2130; }
 
   #darkToggle:hover { background: var(--line); }
+
+/* 3PL Modal */
+#tpl-modal-overlay {
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:9998;
+  align-items:center;
+  justify-content:center;
+}
+#tpl-modal-overlay.open {
+  display:flex;
+}
+#tpl-modal {
+  background:var(--card);
+  border-radius:16px;
+  width:90%;
+  max-width:820px;
+  max-height:85vh;
+  overflow-y:auto;
+  box-shadow:0 8px 40px rgba(0,0,0,.3);
+  position:relative;
+}
+#tpl-modal-header {
+  position:sticky;
+  top:0;
+  background:var(--card);
+  padding:16px 20px 12px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  z-index:1;
+}
+#tpl-modal-body {
+  padding:16px 20px;
+}
+#tpl-modal-close {
+  font-size:20px;
+  background:none;
+  border:none;
+  cursor:pointer;
+  color:var(--muted);
+  padding:4px 8px;
+  border-radius:8px;
+}
+#tpl-modal-close:hover { background:var(--line); }
 </style>
 </head>
 <body>
@@ -507,7 +555,16 @@
 
   <nav class="tabs" id="tabs"></nav>
 
-  <div id="overview"></div>
+  <div id="tpl-modal-overlay" onclick="if(event.target===this)closeTplModal()">
+  <div id="tpl-modal">
+    <div id="tpl-modal-header">
+      <div id="tpl-modal-title" style="font-size:15px;font-weight:800"></div>
+      <button id="tpl-modal-close" onclick="closeTplModal()">✕</button>
+    </div>
+    <div id="tpl-modal-body"></div>
+  </div>
+</div>
+<div id="overview"></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
   <div id="taskview" class="hidden"></div>
@@ -1084,14 +1141,17 @@ function whyButton(zid){
   return `<div class="why"><button class="whybtn" onclick="toggleOff('${zid}')">Why? / 3PL ▾</button></div>`;
 }
 function toggleOff(zid){
-  const w=document.getElementById("offwrap-"+zid);
-  if(!w) return;
-  const isOpening = !w.classList.contains("open");
-  w.classList.toggle("open");
-  // Rebuild with latest WH data each time we open
-  if(isOpening){
-    w.innerHTML = officesHTML(zid);
-  }
+  const zone = ZONES.find(z=>z.id===zid);
+  const title = zone ? zone.name + " — 3PL Working Hours" : "3PL Working Hours";
+  document.getElementById("tpl-modal-title").textContent = "🚚 " + title;
+  document.getElementById("tpl-modal-body").innerHTML = officesHTML(zid);
+  document.getElementById("tpl-modal-overlay").classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeTplModal(){
+  document.getElementById("tpl-modal-overlay").classList.remove("open");
+  document.body.style.overflow = "";
 }
 
 /* offices table for a zone, sorted by gap vs target (most under target first) */
