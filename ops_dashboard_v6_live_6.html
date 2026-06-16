@@ -1610,11 +1610,8 @@ function renderTasks(){
         </div>
       </div>
       ${sorted.length===0
-        ? \`<div style="padding:14px;color:var(--muted);font-size:13px">No tasks for this area.</div>\`
-        : \`<table>
-            <thead><tr><th>Task</th><th>Owner</th><th>Priority</th><th>Deadline</th><th>Notes</th><th>Status</th></tr></thead>
-            <tbody>${sorted.map(taskRow).join("")}</tbody>
-           </table>\`
+        ? "<div style=\"padding:14px;color:var(--muted);font-size:13px\">No tasks for this area.</div>"
+        : "<table><thead><tr><th>Task</th><th>Owner</th><th>Priority</th><th>Deadline</th><th>Notes</th><th>Status</th></tr></thead><tbody>"+sorted.map(taskRow).join("")+"</tbody></table>"
       }
     </div>`;
   };
