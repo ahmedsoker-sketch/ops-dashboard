@@ -3234,7 +3234,7 @@ function buildAnomaly(today){
         </div>
       </div>
       <span class="chip" style="background:${bbg};color:${bc};border-color:${bc};font-size:11px">
-        ${isHigh?"🔴 High":"🟡 Medium"} · z=${a.zScore}
+        ${isHigh?"🔴 Severe":"🟡 Unusual"} · ${a.dir==="drop"?"-":"+"}${a.pctChange}%
       </span>
     </div>`;
   }).join("");
