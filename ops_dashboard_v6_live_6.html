@@ -337,6 +337,48 @@
   border-radius:8px;
 }
 #tpl-modal-close:hover { background:var(--line); }
+
+/* Area Password Lock */
+.area-locked {
+  background: var(--card);
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.area-lock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+}
+.area-lock-header:hover { background: var(--flat-bg); }
+.area-lock-icon { font-size: 20px; margin-right: 10px; }
+.area-pw-form {
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--flat-bg);
+}
+.area-pw-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--card);
+  color: var(--ink);
+}
+.area-pw-error {
+  color: var(--bad);
+  font-size: 12px;
+  padding: 0 20px 12px;
+  background: var(--flat-bg);
+}
 </style>
 </head>
 <body>
@@ -1678,11 +1720,51 @@ function isOverdue(deadline){
 }
 
 const TASK_AREAS = [
-  { id:"moh-area", name:"🏙️ Mohandiseen Area" },
-  { id:"oct-area", name:"🌆 October Area" },
-  { id:"giz-area", name:"🌍 Giza Area" },
-  { id:"general",  name:"📍 General" },
+  { id:"moh-area", name:"Mohandiseen Area", icon:"🏙️" },
+  { id:"oct-area", name:"October Area",     icon:"🌆" },
+  { id:"giz-area", name:"Giza Area",        icon:"🌍" },
+  { id:"general",  name:"General",          icon:"📍" },
 ];
+
+// Area passwords (hashed)
+const AREA_HASHES = {
+  "moh-area": "9251a85ef628c152",
+  "oct-area": "2f48ff6ae57c46ed",
+  "giz-area": "79c38538f8fd2a11",
+  "general":  "0b15006f9f076d85"
+};
+
+// Unlocked areas stored in session
+let unlockedAreas = JSON.parse(sessionStorage.getItem("unlockedAreas")||"{}");
+
+async function hashPw(pw){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,16);
+}
+
+async function tryUnlock(areaId){
+  const input = document.getElementById("pw-input-"+areaId);
+  const errEl = document.getElementById("pw-error-"+areaId);
+  if(!input) return;
+  const h = await hashPw(input.value.trim());
+  if(h === AREA_HASHES[areaId]){
+    unlockedAreas[areaId] = true;
+    sessionStorage.setItem("unlockedAreas", JSON.stringify(unlockedAreas));
+    renderTasks();
+  } else {
+    if(errEl){ errEl.textContent = "Incorrect password"; errEl.style.display="block"; }
+    input.value = "";
+    input.focus();
+  }
+}
+
+function toggleAreaPwForm(areaId){
+  const form = document.getElementById("pw-form-"+areaId);
+  if(!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "flex";
+  if(!isOpen) document.getElementById("pw-input-"+areaId)?.focus();
+}
 
 function renderTasks(){
   const tv = document.getElementById("taskview");
@@ -1732,6 +1814,7 @@ function renderTasks(){
   };
 
   const areaBlock = (area) => {
+    const unlocked = !!unlockedAreas[area.id];
     const aTasks = tasksCache.filter(t=>(t.area||"general")===area.id);
     const aPend  = aTasks.filter(t=>!t.done).length;
     const aDone  = aTasks.filter(t=>t.done).length;
@@ -1740,10 +1823,38 @@ function renderTasks(){
       const po={High:0,Medium:1,Low:2};
       return (po[a.priority]||1)-(po[b.priority]||1);
     });
+
+    if(!unlocked){
+      return `<div class="area-locked" style="margin-bottom:16px">
+        <div class="area-lock-header" onclick="toggleAreaPwForm('${area.id}')">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">${area.icon||"📍"}</span>
+            <div>
+              <div style="font-size:14px;font-weight:800">${area.name}</div>
+              <div style="font-size:12px;color:var(--muted)">${aTasks.length} tasks · tap to unlock</div>
+            </div>
+          </div>
+          <span style="font-size:20px">🔒</span>
+        </div>
+        <div id="pw-form-${area.id}" class="area-pw-form" style="display:none">
+          <input id="pw-input-${area.id}" type="password" placeholder="Enter password..."
+            onkeydown="if(event.key==='Enter') tryUnlock('${area.id}')">
+          <button onclick="tryUnlock('${area.id}')"
+            style="font-family:inherit;font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;
+            background:var(--accent);color:#fff;border:none;cursor:pointer">Unlock</button>
+        </div>
+        <div id="pw-error-${area.id}" style="display:none" class="area-pw-error"></div>
+      </div>`;
+    }
+
     return `
     <div class="panel" style="margin-bottom:20px">
       <div class="ptitle">
-        <h2 style="font-size:15px">${area.name}</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>${area.icon||"📍"}</span>
+          <h2 style="font-size:15px;margin:0">${area.name}</h2>
+          <span style="font-size:14px" title="Locked" onclick="delete unlockedAreas['${area.id}'];sessionStorage.setItem('unlockedAreas',JSON.stringify(unlockedAreas));renderTasks()" style="cursor:pointer">🔓</span>
+        </div>
         <div style="display:flex;gap:6px">
           <span class="chip" style="background:var(--watch-bg);color:var(--watch);border-color:var(--watch-line)">⏳ ${aPend} pending</span>
           <span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">✅ ${aDone} done</span>
