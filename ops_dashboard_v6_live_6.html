@@ -3733,22 +3733,22 @@ function build3PLAnalysis(today){
   }).join("");
 
   return `<div class="panel" style="overflow-x:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
         <select onchange="tplNameFilter=this.value;renderAnalysis()"
           style="padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
           ${nameOpts}
         </select>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-          <button onclick="tplZoneMulti.clear();renderAnalysis()"
-            style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;
-            ${tplZoneMulti.size===0?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All</button>
-          ${ZONES.map(z=>`<button onclick="if(tplZoneMulti.has('${z.id}')){tplZoneMulti.delete('${z.id}');}else{tplZoneMulti.add('${z.id}');}renderAnalysis()"
-            style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
-            ${tplZoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
-            ${z.name.replace(" Area","").replace("October ","Oct ")}</button>`).join("")}
-        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+        <button onclick="tplZoneMulti.clear();renderAnalysis()"
+          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;
+          ${tplZoneMulti.size===0?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All</button>
+        ${ZONES.map(z=>`<button onclick="if(tplZoneMulti.has('${z.id}')){tplZoneMulti.delete('${z.id}');}else{tplZoneMulti.add('${z.id}');}renderAnalysis()"
+          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
+          ${tplZoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+          ${z.name.replace(" Area","").replace("October ","Oct ")}</button>`).join("")}
       </div>
     </div>
     <table style="min-width:${showZone?"720px":"580px"}">
