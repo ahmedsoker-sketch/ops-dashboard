@@ -471,7 +471,7 @@
     .tab { font-size: 12px; padding: 7px 12px; white-space: nowrap; }
 
     /* Zone cards - single column */
-    #overview { grid-template-columns: 1fr; }
+    #overview { grid-template-columns: 1fr !important; }
     .zbox { padding: 12px; }
     .zbox-name { font-size: 13px; }
 
@@ -766,7 +766,7 @@
     <div id="tpl-modal-body"></div>
   </div>
 </div>
-<div id="overview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px"></div>
+<div id="overview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px"></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
   <div id="taskview" class="hidden"></div>
