@@ -3591,10 +3591,10 @@ async function sendTaskEmailNotification(task){
    🚚 3PL ANALYSIS
    ════════════════════════════════════════════ */
 function build3PLAnalysis(today){
-  const fmtH = v => v!=null ? Math.round(v).toLocaleString()+"h" : "—";
-  const fmtGap = (v,tgt) => {
-    if(v==null||tgt==null) return {str:"—", good:null};
-    const g = Math.round(v-tgt);
+  const fmtH = v => v!=null && v>0 ? Math.round(v).toLocaleString()+"h" : "—";
+  const fmtGap = (v, tgt) => {
+    if(v==null||v===0||tgt==null) return {str:"—", good:null};
+    const g = Math.round(v - tgt);
     return {str:(g>=0?"+":"")+g+"h", good:g>=0};
   };
 
@@ -3603,70 +3603,88 @@ function build3PLAnalysis(today){
   const zoneOpts = `<option value="all" ${tplZoneFilter==="all"?"selected":""}>All Zones</option>`
     + ZONES.map(z=>`<option value="${z.id}" ${tplZoneFilter===z.id?"selected":""}>${z.name}</option>`).join("");
 
-  // Collect all 3PL rows
   const rows = [];
   filteredZones.forEach(z=>{
     const zd = whCache[z.id];
     if(!zd) return;
     const n = whDates.length;
+
     Object.entries(zd).forEach(([name, hoursArr])=>{
       const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
 
-      // Today = last date
-      const todayVal  = n>0 ? hoursArr[n-1] : null;
-      // Yesterday
-      const yestVal   = n>1 ? hoursArr[n-2] : null;
-      // Week avg (last 7)
-      const wVals = hoursArr.slice(Math.max(0,n-7)).filter(v=>v!=null&&v>0);
-      const weekAvg = wVals.length ? wVals.reduce((a,b)=>a+b,0)/wVals.length : null;
-      // Month avg (all available)
-      const mVals = hoursArr.filter(v=>v!=null&&v>0);
-      const monthAvg = mVals.length ? mVals.reduce((a,b)=>a+b,0)/mVals.length : null;
-      // Trend: compare today vs yesterday
-      const trend = (todayVal!=null&&yestVal!=null&&yestVal>0)
-        ? (todayVal > yestVal ? "↑" : todayVal < yestVal ? "↓" : "→")
+      // Find last day with real data (>0)
+      let lastIdx = -1;
+      for(let i=n-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ lastIdx=i; break; } }
+      if(lastIdx < 0) return; // no data at all
+
+      // Latest = last real day
+      const latestVal = hoursArr[lastIdx];
+      const latestDate = whDates[lastIdx] || "";
+
+      // Prev day = last real day before lastIdx
+      let prevVal = null;
+      for(let i=lastIdx-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ prevVal=hoursArr[i]; break; } }
+
+      // Last 7 days avg (real values only, up to lastIdx)
+      const w7vals = hoursArr.slice(Math.max(0, lastIdx-6), lastIdx+1).filter(v=>v!=null&&v>0);
+      const weekAvg = w7vals.length ? w7vals.reduce((a,b)=>a+b,0)/w7vals.length : null;
+
+      // MTD avg (all real values)
+      const mtdVals = hoursArr.filter(v=>v!=null&&v>0);
+      const mtdAvg = mtdVals.length ? mtdVals.reduce((a,b)=>a+b,0)/mtdVals.length : null;
+
+      // Trend: latest vs prev
+      const trend = (latestVal!=null&&prevVal!=null)
+        ? (latestVal > prevVal*1.01 ? "↑" : latestVal < prevVal*0.99 ? "↓" : "→")
         : "—";
       const trendClr = trend==="↑"?"var(--good)":trend==="↓"?"var(--bad)":"var(--muted)";
 
       rows.push({name, zoneName:z.name, zid:z.id, tgt,
-        todayVal, yestVal, weekAvg, monthAvg, trend, trendClr});
+        latestVal, latestDate, prevVal, weekAvg, mtdAvg, trend, trendClr});
     });
   });
 
   if(!rows.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available.</div></div>`;
 
-  // Sort: under target first (worst gap first), then on target
+  // Sort: worst gap first
   rows.sort((a,b)=>{
-    const gA = (a.todayVal!=null&&a.tgt!=null) ? a.todayVal-a.tgt : 0;
-    const gB = (b.todayVal!=null&&b.tgt!=null) ? b.todayVal-b.tgt : 0;
+    const gA = (a.latestVal&&a.tgt) ? a.latestVal-a.tgt : 0;
+    const gB = (b.latestVal&&b.tgt) ? b.latestVal-b.tgt : 0;
     return gA-gB;
   });
 
   const showZone = tplZoneFilter==="all";
 
   const tableRows = rows.map(r=>{
-    const todayGap  = fmtGap(r.todayVal,  r.tgt);
-    const weekGap   = fmtGap(r.weekAvg,   r.tgt);
-    const monthGap  = fmtGap(r.monthAvg,  r.tgt);
-    const todayClr  = todayGap.good===true?"var(--good)":todayGap.good===false?"var(--bad)":"var(--muted)";
-    const weekClr   = weekGap.good===true?"var(--good)":weekGap.good===false?"var(--bad)":"var(--muted)";
-    const monthClr  = monthGap.good===true?"var(--good)":monthGap.good===false?"var(--bad)":"var(--muted)";
+    const latGap  = fmtGap(r.latestVal, r.tgt);
+    const weekGap = fmtGap(r.weekAvg,   r.tgt);
+    const mtdGap  = fmtGap(r.mtdAvg,    r.tgt);
+    const latClr  = latGap.good===true?"var(--good)":latGap.good===false?"var(--bad)":"var(--muted)";
+    const weekClr = weekGap.good===true?"var(--good)":weekGap.good===false?"var(--bad)":"var(--muted)";
+    const mtdClr  = mtdGap.good===true?"var(--good)":mtdGap.good===false?"var(--bad)":"var(--muted)";
+    const latBg   = latGap.good===false?"var(--bad-bg)":latGap.good===true?"var(--good-bg)":"";
+    const weekBg  = weekGap.good===false?"var(--bad-bg)":weekGap.good===true?"var(--good-bg)":"";
+    const mtdBg   = mtdGap.good===false?"var(--bad-bg)":mtdGap.good===true?"var(--good-bg)":"";
 
     return `<tr>
       <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeHtml(r.name)}</td>
       ${showZone?`<td style="padding:9px 8px;font-size:12px;color:var(--muted)">${r.zoneName}</td>`:""}
-      <td style="padding:9px 8px;text-align:center;font-size:13px;font-weight:700;background:${todayGap.good===false?"var(--bad-bg)":todayGap.good===true?"var(--good-bg)":""}">
-        ${fmtH(r.todayVal)}<br><span style="font-size:10px;color:${todayClr};font-weight:800">${todayGap.str}</span>
+      <td style="padding:9px 8px;text-align:center;background:${latBg}">
+        <div style="font-size:13px;font-weight:700">${fmtH(r.latestVal)}</div>
+        <div style="font-size:10px;color:${latClr};font-weight:800">${latGap.str}</div>
+        <div style="font-size:9px;color:var(--muted)">${r.latestDate}</div>
       </td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.yestVal)}</td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;background:${weekGap.good===false?"var(--bad-bg)":weekGap.good===true?"var(--good-bg)":""}">
-        ${fmtH(r.weekAvg!=null?Math.round(r.weekAvg):null)}<br><span style="font-size:10px;color:${weekClr};font-weight:800">${weekGap.str}</span>
+      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.prevVal)}</td>
+      <td style="padding:9px 8px;text-align:center;background:${weekBg}">
+        <div style="font-size:12px;font-weight:700">${fmtH(r.weekAvg!=null?Math.round(r.weekAvg):null)}</div>
+        <div style="font-size:10px;color:${weekClr};font-weight:800">${weekGap.str}</div>
       </td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;background:${monthGap.good===false?"var(--bad-bg)":monthGap.good===true?"var(--good-bg)":""}">
-        ${fmtH(r.monthAvg!=null?Math.round(r.monthAvg):null)}<br><span style="font-size:10px;color:${monthClr};font-weight:800">${monthGap.str}</span>
+      <td style="padding:9px 8px;text-align:center;background:${mtdBg}">
+        <div style="font-size:12px;font-weight:700">${fmtH(r.mtdAvg!=null?Math.round(r.mtdAvg):null)}</div>
+        <div style="font-size:10px;color:${mtdClr};font-weight:800">${mtdGap.str}</div>
       </td>
       <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.tgt)}</td>
-      <td style="padding:9px 8px;text-align:center;font-size:16px;font-weight:800;color:${r.trendClr}">${r.trend}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:18px;font-weight:800;color:${r.trendClr}">${r.trend}</td>
     </tr>`;
   }).join("");
 
@@ -3678,30 +3696,27 @@ function build3PLAnalysis(today){
         ${zoneOpts}
       </select>
     </div>
-    <table style="min-width:${showZone?"700px":"580px"}">
+    <table style="min-width:${showZone?"720px":"580px"}">
       <thead><tr>
         <th style="padding:9px 12px;text-align:left">3PL</th>
-        ${showZone?`<th style="padding:9px 8px;text-align:left">Zone</th>`:""}
-        <th style="padding:9px 8px;text-align:center">Today</th>
-        <th style="padding:9px 8px;text-align:center">Yesterday</th>
-        <th style="padding:9px 8px;text-align:center">Week Avg</th>
-        <th style="padding:9px 8px;text-align:center">Month Avg</th>
+        ${showZone?`<th style="padding:9px 8px">Zone</th>`:""}
+        <th style="padding:9px 8px;text-align:center">Latest</th>
+        <th style="padding:9px 8px;text-align:center">Prev Day</th>
+        <th style="padding:9px 8px;text-align:center">Last 7 Days</th>
+        <th style="padding:9px 8px;text-align:center">MTD</th>
         <th style="padding:9px 8px;text-align:center">Target</th>
         <th style="padding:9px 8px;text-align:center">Trend</th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
     </table>
     <div style="font-size:11px;color:var(--muted);padding:10px 12px">
-      Sorted by Today gap vs target · Green = on/above target · Red = below target
+      Latest = last day with data · Sorted by gap vs target (worst first)
     </div>
   </div>`;
 }
 
-/* ════════════════════════════════════
-   DASHBOARD LOGIN
-   ════════════════════════════════════ */
+/* DASHBOARD LOGIN */
 const DASH_HASH = "790f1c4e9e97adde6e1c";
-
 async function checkLogin(){
   const pw = document.getElementById("login-pw").value.trim();
   if(!pw) return;
@@ -3718,7 +3733,6 @@ async function checkLogin(){
     setTimeout(()=>err.style.display="none", 3000);
   }
 }
-
 (function(){
   if(sessionStorage.getItem("dashAuth")==="1"){
     const s = document.getElementById("login-screen");
