@@ -3735,7 +3735,7 @@ function build3PLAnalysis(today){
   return `<div class="panel" style="overflow-x:auto">
     <div style="margin-bottom:14px">
       <div style="font-size:15px;font-weight:800;margin-bottom:10px">🚚 3PL Performance</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <div>
           <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">3PL</div>
           <select onchange="tplNameFilter=this.value;renderAnalysis()"
@@ -3744,10 +3744,12 @@ function build3PLAnalysis(today){
           </select>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Zones</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card)">
-            ${zoneCheckboxes}
-          </div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Zones <span style="font-weight:400">(hold Ctrl to select multiple)</span></div>
+          <select multiple onchange="tplZoneMulti=new Set([...this.selectedOptions].map(o=>o.value).filter(v=>v!=='all'));renderAnalysis()"
+            style="padding:4px 6px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink);min-width:180px;height:120px">
+            <option value="all" ${tplZoneMulti.size===0?"selected":""}>All Zones</option>
+            ${ZONES.map(z=>`<option value="${z.id}" ${tplZoneMulti.has(z.id)?"selected":""}>${z.name}</option>`).join("")}
+          </select>
         </div>
       </div>
     </div>
