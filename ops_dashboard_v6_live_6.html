@@ -444,6 +444,89 @@
   margin-top: 10px;
   display: none;
 }
+
+  /* ══════════════════════════════
+     MOBILE VIEW (max-width: 600px)
+     ══════════════════════════════ */
+  @media (max-width: 600px){
+    .wrap { padding: 12px 10px 80px; }
+
+    /* Header */
+    header.top { gap: 8px; }
+    header.top h1 { font-size: 20px; }
+    .vmode button { padding: 6px 10px; font-size: 12px; }
+    #darkToggle { font-size: 12px; padding: 5px 8px; }
+    #editBtn { font-size: 11px; padding: 5px 10px; }
+
+    /* Tabs - scrollable horizontal */
+    .tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: 4px;
+      padding-bottom: 2px;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { font-size: 12px; padding: 7px 12px; white-space: nowrap; }
+
+    /* Zone cards - single column */
+    #overview { grid-template-columns: 1fr !important; }
+    .zbox { padding: 12px; }
+    .zbox-name { font-size: 13px; }
+
+    /* Panels */
+    .panel { padding: 12px; border-radius: 12px; }
+    .ptitle { flex-wrap: wrap; gap: 6px; }
+    .ptitle h2 { font-size: 14px; }
+
+    /* Tables - scrollable */
+    table { font-size: 12px; }
+    th, td { padding: 8px 6px; }
+    .panel { overflow-x: auto; }
+
+    /* Date pickers */
+    #datepickers { flex-wrap: wrap; gap: 6px; }
+    #datepickers label { font-size: 12px; }
+    #datepickers input[type=date] { font-size: 12px; padding: 4px 6px; }
+
+    /* Briefing zones */
+    .chip { font-size: 10px; padding: 3px 8px; }
+
+    /* Login screen */
+    #login-box { padding: 28px 20px; margin: 16px; }
+    #login-box h1 { font-size: 20px; }
+
+    /* Modal */
+    #tpl-modal { width: 96%; max-height: 90vh; border-radius: 12px; }
+
+    /* Analysis buttons */
+    .analysis-btns { flex-wrap: wrap; }
+
+    /* Targets accordion */
+    .tgt-header { padding: 12px 14px; }
+    .tgt-body table { font-size: 12px; }
+
+    /* Bottom nav feel - sticky tabs */
+    .tabs {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 100;
+      padding: 6px 0 4px;
+      margin: 8px 0 10px;
+    }
+
+    /* Add task form */
+    #nt-grid { grid-template-columns: 1fr !important; }
+
+    /* Action log */
+    .offtbl th, .offtbl td { padding: 6px 5px; font-size: 11px; }
+
+    /* 3PL modal */
+    .area-pw-form { flex-direction: column; }
+    .area-pw-form input { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -683,7 +766,7 @@
     <div id="tpl-modal-body"></div>
   </div>
 </div>
-<div id="overview"></div>
+<div id="overview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px"></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
   <div id="taskview" class="hidden"></div>
