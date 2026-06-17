@@ -379,11 +379,88 @@
   padding: 0 20px 12px;
   background: var(--flat-bg);
 }
+
+/* Dashboard Login Screen */
+#login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#login-box {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 40px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.15);
+  text-align: center;
+}
+#login-box h1 {
+  font-size: 24px;
+  font-weight: 900;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+#login-box p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+#login-pw {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  text-align: center;
+  letter-spacing: 2px;
+}
+#login-pw:focus { outline: none; border-color: var(--accent); }
+#login-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+#login-btn:hover { opacity: .9; }
+#login-error {
+  color: var(--bad);
+  font-size: 12px;
+  margin-top: 10px;
+  display: none;
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="top" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:4px">
+  <div id="login-screen">
+  <div id="login-box">
+    <div style="font-size:40px;margin-bottom:12px">🚀</div>
+    <h1>Giza Ops</h1>
+    <p>Enter your access code to continue</p>
+    <input id="login-pw" type="password" placeholder="••••••••••"
+      onkeydown="if(event.key==='Enter') checkLogin()">
+    <button id="login-btn" onclick="checkLogin()">Enter Dashboard</button>
+    <div id="login-error">Incorrect access code. Try again.</div>
+  </div>
+</div>
+
+<header class="top" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:4px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
       <div class="vmode" id="vmodeBar">
@@ -3614,6 +3691,36 @@ function build3PLAnalysis(today){
     </div>
   </div>`;
 }
+
+/* ════════════════════════════════════
+   DASHBOARD LOGIN
+   ════════════════════════════════════ */
+const DASH_HASH = "790f1c4e9e97adde6e1c";
+
+async function checkLogin(){
+  const pw = document.getElementById("login-pw").value.trim();
+  if(!pw) return;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw));
+  const h = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,20);
+  if(h === DASH_HASH){
+    sessionStorage.setItem("dashAuth","1");
+    document.getElementById("login-screen").style.display = "none";
+  } else {
+    const err = document.getElementById("login-error");
+    err.style.display = "block";
+    document.getElementById("login-pw").value = "";
+    document.getElementById("login-pw").focus();
+    setTimeout(()=>err.style.display="none", 3000);
+  }
+}
+
+// Check if already authenticated
+(function(){
+  if(sessionStorage.getItem("dashAuth")==="1"){
+    const s = document.getElementById("login-screen");
+    if(s) s.style.display = "none";
+  }
+})();
 
 function setTarget(zid,name,v){
   state.targets[zid+"|"+name]=v; saveState();
