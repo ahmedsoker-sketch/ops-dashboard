@@ -45,7 +45,7 @@
   .chip.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
 
   /* ── Zone Map Grid ── */
-  .zmap{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:6px}
+  .zmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:6px}
   .zbox{
     position:relative;cursor:pointer;border-radius:16px;padding:18px 16px 14px;
     border:2px solid transparent;transition:transform .15s,box-shadow .15s;
@@ -766,7 +766,7 @@
     <div id="tpl-modal-body"></div>
   </div>
 </div>
-<div id="overview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px"></div>
+<div id="overview" style=""></div>
   <div id="zoneview" class="hidden"></div>
   <div id="logview" class="hidden"></div>
   <div id="taskview" class="hidden"></div>
