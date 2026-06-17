@@ -3027,6 +3027,8 @@ function buildWeeklySummaryHTML(){
 let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly" | "3pl"
 let tplZoneFilter = "all";
 let tplDateFilter = null;
+let tplNameFilter = "all";       // filter by 3PL name
+let tplZoneMulti  = new Set();   // multi-select zones (empty = all)
 let deepDiveMetric  = "on_time";
 
 function renderAnalysis(){
@@ -3617,18 +3619,38 @@ function build3PLAnalysis(today){
     return {str:(g>=0?"+":"")+g+"h", good:g>=0};
   };
 
-  // Zone filter
-  const filteredZones = tplZoneFilter==="all" ? ZONES : ZONES.filter(z=>z.id===tplZoneFilter);
-  const zoneOpts = `<option value="all" ${tplZoneFilter==="all"?"selected":""}>All Zones</option>`
-    + ZONES.map(z=>`<option value="${z.id}" ${tplZoneFilter===z.id?"selected":""}>${z.name}</option>`).join("");
+  // Collect all 3PL names across all zones
+  const allTplNames = [...new Set(
+    ZONES.flatMap(z=>Object.keys(whCache[z.id]||{}))
+  )].sort();
+
+  // Zone multi-select: if empty = all
+  const activeZones = tplZoneMulti.size===0 ? ZONES : ZONES.filter(z=>tplZoneMulti.has(z.id));
+
+  // Zone checkboxes
+  const zoneCheckboxes = ZONES.map(z=>{
+    const checked = tplZoneMulti.size===0 || tplZoneMulti.has(z.id);
+    return `<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" ${checked?"checked":""} onchange="
+        if(this.checked){ tplZoneMulti.delete('${z.id}'); if(tplZoneMulti.size===0){} }
+        else { if(tplZoneMulti.size===0) ZONES.forEach(zz=>tplZoneMulti.add(zz.id)); tplZoneMulti.delete('${z.id}'); if(tplZoneMulti.size===ZONES.length) tplZoneMulti.clear(); }
+        renderAnalysis()">
+      ${z.name.replace(/ Area/,"").replace(/October /,"Oct ")}
+    </label>`;
+  }).join("");
+
+  // 3PL name filter
+  const nameOpts = `<option value="all" ${tplNameFilter==="all"?"selected":""}>All 3PLs</option>`
+    + allTplNames.map(n=>`<option value="${escapeHtml(n)}" ${tplNameFilter===n?"selected":""}>${escapeHtml(n)}</option>`).join("");
 
   const rows = [];
-  filteredZones.forEach(z=>{
+  activeZones.forEach(z=>{
     const zd = whCache[z.id];
     if(!zd) return;
     const n = whDates.length;
 
     Object.entries(zd).forEach(([name, hoursArr])=>{
+      if(tplNameFilter!=="all" && name!==tplNameFilter) return;
       const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
 
       // Find last day with real data (>0)
@@ -3672,7 +3694,7 @@ function build3PLAnalysis(today){
     return gA-gB;
   });
 
-  const showZone = tplZoneFilter==="all";
+  const showZone = activeZones.length > 1;
 
   const tableRows = rows.map(r=>{
     const latGap  = fmtGap(r.latestVal, r.tgt);
@@ -3711,12 +3733,23 @@ function build3PLAnalysis(today){
   }).join("");
 
   return `<div class="panel" style="overflow-x:auto">
-    <div class="ptitle" style="margin-bottom:12px">
-      <h2 style="font-size:15px">🚚 3PL Performance</h2>
-      <select onchange="tplZoneFilter=this.value;renderAnalysis()"
-        style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
-        ${zoneOpts}
-      </select>
+    <div style="margin-bottom:14px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:10px">🚚 3PL Performance</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">3PL</div>
+          <select onchange="tplNameFilter=this.value;renderAnalysis()"
+            style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink);min-width:140px">
+            ${nameOpts}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Zones</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card)">
+            ${zoneCheckboxes}
+          </div>
+        </div>
+      </div>
     </div>
     <table style="min-width:${showZone?"720px":"580px"}">
       <thead><tr>
