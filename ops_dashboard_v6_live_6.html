@@ -1132,7 +1132,7 @@ function renderZone(zid){
     +'</div>'
     +'<div class="panel">'
     +'<div class="ptitle"><h2>'+z.name+'</h2><span class="chip '+v.cls+'">'+v.txt+'</span></div>'
-    +'<table><thead><tr><th>Metric</th><th>Day 1: '+(state.labels.today||'—')+'</th><th>Day 2: '+(state.labels.prev||'—')+'</th><th>Change</th></tr></thead>'
+    +'<table><thead><tr><th>Metric</th><th>Main: '+(state.labels.today||'—')+'</th><th>Compare: '+(state.labels.prev||'—')+'</th><th>Change</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table>'
     +'</div>';
 }
