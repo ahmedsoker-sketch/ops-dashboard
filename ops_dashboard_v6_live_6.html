@@ -3498,14 +3498,16 @@ function buildAnomaly(today){
       const zScore = Math.abs((cur - mean) / std);
       if(zScore > 2){
         const isBad = (m.better==="high" && cur < mean) || (m.better==="low" && cur > mean);
-        if(!isBad) return;
+        const isGood = (m.better==="high" && cur > mean) || (m.better==="low" && cur < mean);
+        if(!isBad && !isGood) return;
         const dir = cur > mean ? "spike" : "drop";
         const pctChange = Math.round(Math.abs((cur-mean)/mean)*100);
         anomalies.push({
           zone: z.name, metric: m.ar,
           cur, mean, zScore: zScore.toFixed(1),
           dir, pctChange, fmt: m.fmt,
-          severity: zScore > 3 ? "high" : "medium"
+          severity: zScore > 3 ? "high" : "medium",
+          type: isBad ? "bad" : "good"
         });
       }
     });
@@ -3520,6 +3522,9 @@ function buildAnomaly(today){
     ${dayPicker}${weekPicker}${monthPicker}
   </div>`;
 
+  const badAnomalies  = anomalies.filter(a=>a.type==="bad");
+  const goodAnomalies = anomalies.filter(a=>a.type==="good");
+
   if(!anomalies.length) return `<div class="panel">
     <div class="ptitle">
       <h2 style="font-size:15px">🚨 Anomaly Detection — ${periodLabel}</h2>
@@ -3528,12 +3533,13 @@ function buildAnomaly(today){
     <div style="padding:20px;text-align:center;color:var(--good);font-size:14px;font-weight:700">✅ No anomalies detected — all metrics within normal range!</div>
   </div>`;
 
-  const rows = anomalies.map(a=>{
+  const makeRow = (a) => {
+    const isBad = a.type==="bad";
     const isHigh = a.severity==="high";
-    const bc  = a.dir==="drop"?"var(--bad)":"var(--watch)";
-    const bbg = a.dir==="drop"?"var(--bad-bg)":"var(--watch-bg)";
-    const icon = a.dir==="drop" ? "📉" : "📈";
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:${isHigh?bbg:""}">
+    const bc  = isBad ? (a.dir==="drop"?"var(--bad)":"var(--watch)") : "var(--good)";
+    const bbg = isBad ? (a.dir==="drop"?"var(--bad-bg)":"var(--watch-bg)") : "var(--good-bg)";
+    const icon = isBad ? (a.dir==="drop" ? "📉" : "📈") : "⭐";
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:${isHigh&&isBad?bbg:""}">
       <div style="display:flex;align-items:center;gap:12px">
         <span style="font-size:20px">${icon}</span>
         <div>
@@ -3546,18 +3552,31 @@ function buildAnomaly(today){
         </div>
       </div>
       <span class="chip" style="background:${bbg};color:${bc};border-color:${bc};font-size:11px">
-        ${isHigh?"🔴 Severe":"🟡 Unusual"} · ${a.dir==="drop"?"-":"+"}${a.pctChange}%
+        ${isBad?(isHigh?"🔴 Severe":"🟡 Unusual"):"🟢 Positive"} · ${a.dir==="drop"?"-":"+"}${a.pctChange}%
       </span>
     </div>`;
-  }).join("");
+  };
 
-  return `<div class="panel">
-    <div class="ptitle">
-      <h2 style="font-size:15px">🚨 Anomaly Detection — ${periodLabel}</h2>
-      <span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">${anomalies.length} anomaly${anomalies.length!==1?"ies":""}</span>
+  const rows = badAnomalies.map(makeRow).join("");
+  const goodRows = goodAnomalies.map(makeRow).join("");
+
+  return `<div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="ptitle">
+        <h2 style="font-size:15px">🚨 Issues — ${periodLabel}</h2>
+        <span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">${badAnomalies.length} anomaly${badAnomalies.length!==1?"ies":""}</span>
+      </div>
+      <div style="padding:0 16px">${pickerBar}</div>
+      ${rows||`<div style="padding:20px;text-align:center;color:var(--good);font-size:13px;font-weight:700">✅ No issues detected!</div>`}
     </div>
-    <div style="padding:0 16px">${pickerBar}</div>
-    ${rows}
+    ${goodAnomalies.length>0?`
+    <div class="panel">
+      <div class="ptitle">
+        <h2 style="font-size:15px">⭐ Positive Surprises — ${periodLabel}</h2>
+        <span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">${goodAnomalies.length} surprise${goodAnomalies.length!==1?"s":""}</span>
+      </div>
+      ${goodRows}
+    </div>`:""}
   </div>`;
 }
 
@@ -3622,8 +3641,8 @@ function build3PLAnalysis(today){
       const latestDate = whDates[lastIdx] || "";
 
       // Prev day = last real day before lastIdx
-      let prevVal = null;
-      for(let i=lastIdx-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ prevVal=hoursArr[i]; break; } }
+      let prevVal = null, prevDate = "";
+      for(let i=lastIdx-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ prevVal=hoursArr[i]; prevDate=whDates[i]||""; break; } }
 
       // Last 7 days avg (real values only, up to lastIdx)
       const w7vals = hoursArr.slice(Math.max(0, lastIdx-6), lastIdx+1).filter(v=>v!=null&&v>0);
@@ -3640,7 +3659,7 @@ function build3PLAnalysis(today){
       const trendClr = trend==="↑"?"var(--good)":trend==="↓"?"var(--bad)":"var(--muted)";
 
       rows.push({name, zoneName:z.name, zid:z.id, tgt,
-        latestVal, latestDate, prevVal, weekAvg, mtdAvg, trend, trendClr});
+        latestVal, latestDate, prevVal, prevDate, weekAvg, mtdAvg, trend, trendClr});
     });
   });
 
@@ -3669,12 +3688,15 @@ function build3PLAnalysis(today){
     return `<tr>
       <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeHtml(r.name)}</td>
       ${showZone?`<td style="padding:9px 8px;font-size:12px;color:var(--muted)">${r.zoneName}</td>`:""}
+      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">
+        <div>${fmtH(r.prevVal)}</div>
+        <div style="font-size:9px;color:var(--muted)">${r.prevDate||""}</div>
+      </td>
       <td style="padding:9px 8px;text-align:center;background:${latBg}">
         <div style="font-size:13px;font-weight:700">${fmtH(r.latestVal)}</div>
         <div style="font-size:10px;color:${latClr};font-weight:800">${latGap.str}</div>
         <div style="font-size:9px;color:var(--muted)">${r.latestDate}</div>
       </td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.prevVal)}</td>
       <td style="padding:9px 8px;text-align:center;background:${weekBg}">
         <div style="font-size:12px;font-weight:700">${fmtH(r.weekAvg!=null?Math.round(r.weekAvg):null)}</div>
         <div style="font-size:10px;color:${weekClr};font-weight:800">${weekGap.str}</div>
@@ -3700,8 +3722,8 @@ function build3PLAnalysis(today){
       <thead><tr>
         <th style="padding:9px 12px;text-align:left">3PL</th>
         ${showZone?`<th style="padding:9px 8px">Zone</th>`:""}
-        <th style="padding:9px 8px;text-align:center">Latest</th>
         <th style="padding:9px 8px;text-align:center">Prev Day</th>
+        <th style="padding:9px 8px;text-align:center">Latest</th>
         <th style="padding:9px 8px;text-align:center">Last 7 Days</th>
         <th style="padding:9px 8px;text-align:center">MTD</th>
         <th style="padding:9px 8px;text-align:center">Target</th>
