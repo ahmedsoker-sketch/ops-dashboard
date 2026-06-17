@@ -3697,6 +3697,35 @@ function build3PLAnalysis(today){
   </div>`;
 }
 
+/* ════════════════════════════════════
+   DASHBOARD LOGIN
+   ════════════════════════════════════ */
+const DASH_HASH = "790f1c4e9e97adde6e1c";
+
+async function checkLogin(){
+  const pw = document.getElementById("login-pw").value.trim();
+  if(!pw) return;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw));
+  const h = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,20);
+  if(h === DASH_HASH){
+    sessionStorage.setItem("dashAuth","1");
+    document.getElementById("login-screen").style.display = "none";
+  } else {
+    const err = document.getElementById("login-error");
+    err.style.display = "block";
+    document.getElementById("login-pw").value = "";
+    document.getElementById("login-pw").focus();
+    setTimeout(()=>err.style.display="none", 3000);
+  }
+}
+
+(function(){
+  if(sessionStorage.getItem("dashAuth")==="1"){
+    const s = document.getElementById("login-screen");
+    if(s) s.style.display = "none";
+  }
+})();
+
 function setTarget(zid,name,v){
   state.targets[zid+"|"+name]=v; saveState();
   if(curTab!=="overview") renderZone(curTab);
