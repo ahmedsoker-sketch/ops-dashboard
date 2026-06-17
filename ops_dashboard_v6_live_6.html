@@ -3733,13 +3733,19 @@ function build3PLAnalysis(today){
   }).join("");
 
   return `<div class="panel" style="overflow-x:auto">
-    <div style="margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <div style="padding:4px 0 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
-        <select onchange="tplNameFilter=this.value;renderAnalysis()"
-          style="padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink)">
-          ${nameOpts}
-        </select>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          ${allTplNames.map(n=>`<button onclick="tplNameFilter='${n.replace(/'/g,"\'")}';renderAnalysis()"
+            style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
+            ${tplNameFilter===n?'background:var(--ink2);color:#fff;border-color:var(--ink2)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+            ${escapeHtml(n)}</button>`).join("")}
+          <button onclick="tplNameFilter='all';renderAnalysis()"
+            style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+            ${tplNameFilter==='all'?'background:var(--ink2);color:#fff;border-color:var(--ink2)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+            All 3PLs</button>
+        </div>
       </div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
         <button onclick="tplZoneMulti.clear();renderAnalysis()"
