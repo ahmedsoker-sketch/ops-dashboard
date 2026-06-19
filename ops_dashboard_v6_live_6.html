@@ -527,6 +527,188 @@
     .area-pw-form { flex-direction: column; }
     .area-pw-form input { width: 100%; }
   }
+
+  /* ===== V7 PREMIUM UI UPGRADE ===== */
+
+body{
+background:
+radial-gradient(circle at top right,
+rgba(255,90,0,.08),
+transparent 35%),
+radial-gradient(circle at bottom left,
+rgba(255,90,0,.04),
+transparent 30%),
+var(--bg);
+}
+
+/* smoother transitions */
+*{
+transition:
+background-color .25s ease,
+border-color .25s ease,
+box-shadow .25s ease,
+transform .25s ease;
+}
+
+/* Header */
+header.top{
+background:var(--card);
+border-radius:20px;
+padding:20px;
+margin-bottom:18px;
+box-shadow:0 10px 35px rgba(0,0,0,.05);
+}
+
+/* Live bar */
+.live-bar{
+border-radius:16px;
+backdrop-filter:blur(12px);
+box-shadow:0 8px 30px rgba(0,0,0,.06);
+}
+
+/* Modern Tabs */
+.tabs{
+border:none;
+gap:10px;
+}
+
+.tab{
+border-radius:999px;
+padding:10px 18px;
+background:transparent;
+border:1px solid transparent;
+}
+
+.tab:hover{
+background:rgba(255,90,0,.08);
+}
+
+.tab.active{
+background:var(--accent);
+color:white;
+border-color:var(--accent);
+}
+
+/* Zone Cards */
+.zbox{
+border-radius:20px;
+overflow:hidden;
+position:relative;
+backdrop-filter:blur(10px);
+}
+
+.zbox::before{
+content:"";
+position:absolute;
+top:0;
+left:0;
+right:0;
+height:4px;
+}
+
+.zbox.st-good::before{
+background:#22c55e;
+}
+
+.zbox.st-watch::before{
+background:#f59e0b;
+}
+
+.zbox.st-bad::before{
+background:#ef4444;
+}
+
+.zbox:hover{
+transform:translateY(-8px) scale(1.015);
+}
+
+/* Status Glow */
+.zbox.st-good{
+box-shadow:
+0 10px 35px rgba(34,197,94,.12);
+}
+
+.zbox.st-watch{
+box-shadow:
+0 10px 35px rgba(245,158,11,.12);
+}
+
+.zbox.st-bad{
+box-shadow:
+0 10px 35px rgba(239,68,68,.12);
+}
+
+/* KPI Numbers */
+.zbox-kpi .kval{
+font-size:14px;
+font-weight:900;
+}
+
+/* Panels */
+.panel{
+border-radius:20px;
+overflow:hidden;
+box-shadow:
+0 12px 40px rgba(0,0,0,.05);
+}
+
+/* Tables */
+table tr{
+transition:.2s;
+}
+
+table tbody tr:hover{
+background:rgba(255,90,0,.03);
+}
+
+/* Buttons */
+button{
+border-radius:12px;
+}
+
+button.primary{
+background:linear-gradient(
+135deg,
+#ff5a00,
+#ff7b33
+);
+border:none;
+box-shadow:
+0 6px 18px rgba(255,90,0,.25);
+}
+
+button.primary:hover{
+transform:translateY(-2px);
+}
+
+/* Login Card */
+#login-box{
+backdrop-filter:blur(18px);
+border:1px solid rgba(255,255,255,.15);
+box-shadow:
+0 20px 60px rgba(0,0,0,.12);
+}
+
+/* AI Box */
+.aibox{
+border-radius:18px;
+box-shadow:
+0 10px 30px rgba(255,90,0,.08);
+}
+
+/* Dark Mode Upgrade */
+body.dark{
+--bg:#0b1220;
+--card:#111827;
+}
+
+body.dark .panel,
+body.dark .zbox,
+body.dark .live-bar{
+box-shadow:
+0 12px 40px rgba(0,0,0,.35);
+}
+
 </style>
 </head>
 <body>
