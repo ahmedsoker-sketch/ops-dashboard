@@ -4946,121 +4946,70 @@ async function autoSyncOnLoad(){
 
 </script>
 </body>
-  <style>
-/* 1. تأثير الزجاج الفخم (Glassmorphism) للهيدر */
-header, .header-container {
-    position: sticky !important;
-    top: 0;
-    z-index: 1000 !important;
+<style>
+/* 1. تأثير الزجاج الفخم للهيدر وتثبيته */
+header.top {
+    position: sticky !important; top: 0; z-index: 9999 !important;
     background: rgba(255, 255, 255, 0.85) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+    backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
+    padding: 12px 16px !important; margin: 0 -16px 16px -16px !important;
 }
 
-/* 2. تفاعلات اللمس (Micro-interactions) للكاردات والأزرار */
-div[style*="border-radius"], button, .card {
-    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease !important;
+/* 2. تلميع الكاردات (حذف الإطار الأحمر المزعج وإضافة نعومة) */
+.zbox, .panel, .area-locked {
+    border: 1px solid #e2e8f0 !important; background: #ffffff !important;
+    border-radius: 16px !important; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
+.zbox.st-bad { border-top: 4px solid #ef4444 !important; border-bottom: 1px solid #e2e8f0 !important; border-left: 1px solid #e2e8f0 !important; border-right: 1px solid #e2e8f0 !important; }
+.zbox:active, button:active { transform: scale(0.97) !important; }
 
-div[style*="border-radius"]:active, button:active, .card:active {
-    transform: scale(0.97) !important; /* انكماش ناعم عند الضغط */
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
-}
+/* 3. تلميع الأرقام والـ Badges جوه الكارد */
+.zbox-kpi { border-bottom: 1px dashed #f1f5f9 !important; padding: 8px 0 !important; margin: 0 !important; }
+.zbox-kpi:last-child { border-bottom: none !important; }
+.kval { color: #0f172a !important; font-size: 15px !important; }
+.zbox-badge, .chip { border: none !important; padding: 6px 12px !important; border-radius: 8px !important; font-weight: 700 !important;}
+.zbox-badge.bad, .chip.bad { background: #fef2f2 !important; color: #ef4444 !important; }
+.zbox-badge.good, .chip.good { background: #f0fdf4 !important; color: #16a34a !important; }
+.zbox-badge.watch, .chip.watch { background: #fff7ed !important; color: #c2410c !important; }
 
-/* 3. أنيميشن الدخول (Staggered Fade-in) */
-@keyframes premiumSlideUp {
-    0% { opacity: 0; transform: translateY(30px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
+/* 4. ألوان طلبات الرسمية للتابات والأزرار */
+.tab.active { color: #FF5E00 !important; border-bottom-color: #FF5E00 !important; }
+button.primary, #login-btn, .tab-btn.active::after { background: #FF5E00 !important; border-color: #FF5E00 !important; color: white !important;}
+.live-manual { color: #FF5E00 !important; }
 
-.premium-animate {
-    opacity: 0; /* يبدأ مخفي */
-    animation: premiumSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* 4. انسيابية الجداول (Smooth Slide-down) */
-.smooth-expand {
-    overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s ease;
-}
-
-/* 5. ترقية التابات (Tabs) للون طلبات البرتقالي */
-nav {
-    display: flex;
-    gap: 15px;
-    padding-bottom: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
-}
-nav::-webkit-scrollbar { display: none; }
-
-nav span, nav button {
-    font-weight: 600 !important;
-    color: #64748b !important;
-    padding-bottom: 8px !important;
-    transition: color 0.2s ease !important;
-    cursor: pointer;
-    position: relative;
-}
-
-/* التاب النشط */
-nav span[style*="font-weight: bold"], nav span.active, nav button.active {
-    color: #FF5E00 !important; /* برتقالي طلبات */
-    border-bottom: none !important;
-}
-
-nav span[style*="font-weight: bold"]::after, nav span.active::after, nav button.active::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background-color: #FF5E00;
-    border-radius: 3px 3px 0 0;
-}
+/* 5. أنيميشن الدخول السريع (Staggered Fade-in) */
+@keyframes premiumSlideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+.premium-animate { opacity: 0; animation: premiumSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 </style>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    
-    // --- 1. تطبيق أنيميشن الدخول (Staggered) على كل الكاردات ---
-    // بنستهدف كل العناصر اللي شكلها كارد (واخدة border أو padding)
-    const allCards = document.querySelectorAll('div[style*="border"], .card, section');
-    
-    allCards.forEach((card, index) => {
-        // نستثني الهيدر عشان ميعملش أنيميشن
-        if(!card.closest('header')) {
-            card.classList.add('premium-animate');
-            // كل كارد بيتأخر شوية عن اللي قبله (تأثير تتابعي)
-            card.style.animationDelay = `${(index % 10) * 0.08}s`; 
-        }
-    });
-
-    // --- 2. تحسين جداول الـ 3PL (Smooth Expand) ---
-    // دي فكرة عشان لو عندك جداول بتفتح وتقفل، تشتغل بنعومة
-    const rows = document.querySelectorAll('tr, .row-expandable');
-    rows.forEach(row => {
-        row.addEventListener('click', function() {
-            const detailView = this.nextElementSibling;
-            if (detailView && detailView.classList.contains('details-row')) {
-                // كود بسيط لعمل Slide down
-                if (detailView.style.maxHeight) {
-                    detailView.style.maxHeight = null;
-                } else {
-                    detailView.style.maxHeight = detailView.scrollHeight + "px";
-                }
-            }
-        });
-    });
-
-    // --- 3. استبدال لوجو النص بستايل طلبات (اختياري لو مكنتش عملته) ---
-    const mainTitle = document.querySelector('header h1, header .title');
-    if(mainTitle && !mainTitle.innerHTML.includes('talabat')) {
-        mainTitle.innerHTML = `<span style="color:#FF5E00; font-weight:900; font-style:italic; letter-spacing:-1px;">talabat</span> | <span style="font-size: 18px; color: #1e293b;">Giza Ops</span>`;
+    // حقن لوجو طلبات في الهيدر
+    const h1 = document.querySelector('header.top h1');
+    if(h1 && !h1.innerHTML.includes('talabat')) {
+        h1.innerHTML = '<span style="color:#FF5E00; font-style:italic; font-weight:900; letter-spacing:-1px;">talabat</span> <span style="color:#cbd5e1; font-weight:300; font-size:20px; margin:0 4px;">|</span> <span style="font-size: 20px;">Giza Ops</span>';
     }
+
+    // تفعيل أنيميشن الكاردات بالترتيب
+    const applyAnimation = () => {
+        const cards = document.querySelectorAll('.zbox, .panel, .area-locked');
+        cards.forEach((card, i) => {
+            // مسح الكلاس عشان يشتغل تاني لو غيرت التاب
+            card.classList.remove('premium-animate');
+            void card.offsetWidth; // Trigger reflow
+            card.classList.add('premium-animate');
+            card.style.animationDelay = `${(i % 10) * 0.05}s`;
+        });
+    };
+
+    // تشغيل الأنيميشن أول مرة، ومع كل ضغطة على التابات
+    applyAnimation();
+    document.querySelectorAll('.tab, [data-goto]').forEach(btn => {
+        btn.addEventListener('click', () => setTimeout(applyAnimation, 10));
+    });
 });
 </script>
 </html>
