@@ -708,6 +708,295 @@ body.dark .live-bar{
 box-shadow:
 0 12px 40px rgba(0,0,0,.35);
 }
+
+/* ═══════════════════════════════════════════════════
+   GIZA OPS — BRANDED HEADER (talabat-inspired Control Tower)
+═══════════════════════════════════════════════════ */
+@keyframes headerGradientShift{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+@keyframes blobFloat1{
+  0%,100%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(20px,-15px) scale(1.08)}
+  66%{transform:translate(-15px,10px) scale(.95)}
+}
+@keyframes blobFloat2{
+  0%,100%{transform:translate(0,0) scale(1)}
+  50%{transform:translate(-25px,18px) scale(1.1)}
+}
+@keyframes markPulseRing{
+  0%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}
+  100%{box-shadow:0 0 0 14px rgba(255,255,255,0)}
+}
+@keyframes markGlow{
+  0%,100%{filter:drop-shadow(0 0 6px rgba(255,255,255,.25))}
+  50%{filter:drop-shadow(0 0 14px rgba(255,255,255,.55))}
+}
+@keyframes kpiPop{
+  0%{opacity:0;transform:translateY(6px)}
+  100%{opacity:1;transform:translateY(0)}
+}
+
+header.top{
+  position:relative;
+  overflow:hidden;
+  background:
+    linear-gradient(120deg,#ff5a00 0%,#ff7a1a 18%,#1a1024 55%,#120a1c 100%);
+  background-size:220% 220%;
+  animation:headerGradientShift 14s ease-in-out infinite;
+  border-radius:24px;
+  padding:24px 26px 22px;
+  box-shadow:
+    0 18px 50px rgba(255,90,0,.18),
+    0 4px 18px rgba(0,0,0,.25);
+  border:1px solid rgba(255,255,255,.08);
+}
+
+/* floating ambient shapes */
+header.top::before,
+header.top::after{
+  content:"";
+  position:absolute;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:0;
+  filter:blur(2px);
+}
+header.top::before{
+  width:260px;height:260px;
+  top:-110px;right:-60px;
+  background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);
+  animation:blobFloat1 9s ease-in-out infinite;
+}
+header.top::after{
+  width:180px;height:180px;
+  bottom:-90px;left:8%;
+  background:radial-gradient(circle,rgba(255,138,0,.35),transparent 70%);
+  animation:blobFloat2 11s ease-in-out infinite;
+}
+
+/* every direct child sits above the ambient shapes */
+header.top > *{ position:relative; z-index:1; }
+
+/* brand row */
+.brand-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:14px;
+}
+.brand-id{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+.brand-mark{
+  width:48px;height:48px;
+  border-radius:14px;
+  background:linear-gradient(145deg,#ffffff 0%,#ffe4cc 100%);
+  display:flex;align-items:center;justify-content:center;
+  flex:none;
+  position:relative;
+  animation:markGlow 3.5s ease-in-out infinite;
+}
+.brand-mark::after{
+  content:"";
+  position:absolute;inset:-4px;
+  border-radius:18px;
+  border:1.5px solid rgba(255,255,255,.5);
+  animation:markPulseRing 2.4s ease-out infinite;
+}
+.brand-mark span{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:26px;
+  font-weight:900;
+  font-style:italic;
+  color:#ff5a00;
+  line-height:1;
+  transform:translateY(-1px);
+}
+.brand-text{ display:flex; flex-direction:column; gap:2px; }
+.brand-text h1{
+  font-size:25px;
+  margin:0;
+  font-weight:900;
+  letter-spacing:-.02em;
+  color:#fff;
+  text-shadow:0 2px 12px rgba(0,0,0,.25);
+}
+.brand-sub{
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.65);
+}
+
+/* view mode pills on dark header */
+header.top .vmode{
+  background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(10px);
+  padding:4px;
+  border-radius:13px;
+  gap:2px;
+}
+header.top .vmode button{
+  color:rgba(255,255,255,.75);
+  border-radius:10px;
+  padding:8px 17px;
+  font-weight:700;
+  transition:background .35s cubic-bezier(.34,1.56,.64,1),
+             color .25s ease,
+             box-shadow .35s ease,
+             transform .25s cubic-bezier(.34,1.56,.64,1);
+}
+header.top .vmode button.active{
+  background:#fff;
+  color:#ff5a00;
+  box-shadow:0 6px 18px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.1);
+  transform:scale(1.03);
+}
+header.top .vmode button:hover:not(.active){
+  background:rgba(255,255,255,.22);
+  color:#fff;
+  transform:translateY(-1px);
+}
+header.top .vmode button:active{
+  transform:scale(.97);
+}
+
+/* header KPI strip */
+.header-kpis{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+  padding:14px 18px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:16px;
+  backdrop-filter:blur(8px);
+}
+.hk-item{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  animation:kpiPop .5s ease both;
+}
+.hk-item:nth-child(1){animation-delay:.05s}
+.hk-item:nth-child(3){animation-delay:.12s}
+.hk-item:nth-child(5){animation-delay:.19s}
+.hk-item:nth-child(7){animation-delay:.26s}
+.hk-label{
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.55);
+}
+.hk-value{
+  font-size:21px;
+  font-weight:900;
+  color:#fff;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em;
+  text-shadow:0 2px 10px rgba(0,0,0,.2);
+}
+.hk-delta{
+  font-size:11px;
+  font-weight:800;
+  width:fit-content;
+  padding:1px 7px;
+  border-radius:999px;
+}
+.hk-delta.up{ background:rgba(34,197,94,.22); color:#86efac; }
+.hk-delta.down{ background:rgba(248,113,113,.22); color:#fca5a5; }
+.hk-sep{
+  width:1px;
+  align-self:stretch;
+  background:rgba(255,255,255,.16);
+}
+
+/* header bottom controls row */
+header.top select,
+header.top #editBtn,
+header.top #darkToggle{
+  background:rgba(255,255,255,.12) !important;
+  border:1px solid rgba(255,255,255,.2) !important;
+  color:#fff !important;
+}
+header.top select option{ color:#16181d; }
+header.top .daterow{ color:rgba(255,255,255,.6); }
+header.top .daterow b{ color:#fff; }
+header.top #editBtn:hover,
+header.top #darkToggle:hover{
+  background:rgba(255,255,255,.22) !important;
+}
+header.top #editBtn.on{
+  background:#fff !important;
+  color:#ff5a00 !important;
+  border-color:#fff !important;
+}
+
+/* dark mode tweaks for header */
+body.dark header.top{
+  border-color:rgba(255,255,255,.06);
+}
+
+@media (max-width:600px){
+  header.top{ padding:18px 16px 16px; border-radius:18px; }
+  .brand-mark{ width:40px; height:40px; border-radius:12px; }
+  .brand-mark span{ font-size:21px; }
+  .brand-text h1{ font-size:20px; }
+  .brand-sub{ font-size:9.5px; letter-spacing:.1em; }
+  .header-kpis{ gap:12px 16px; padding:12px 14px; }
+  .hk-value{ font-size:17px; }
+  .hk-sep{ display:none; }
+}
+
+/* ═══════════════════════════════════════════════════
+   LIVE SYNC BAR — now docked inside the branded header
+═══════════════════════════════════════════════════ */
+header.top .live-bar{
+  margin-top:2px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:13px;
+  backdrop-filter:blur(8px);
+  box-shadow:none;
+  padding:9px 14px;
+}
+header.top .live-txt{ color:rgba(255,255,255,.7); }
+header.top .live-txt b{ color:#fff; font-weight:700; }
+header.top .live-next{ color:rgba(255,255,255,.5); }
+header.top .live-manual{
+  color:#ffd9b8;
+  font-weight:800;
+}
+header.top .live-manual:hover{ color:#fff; }
+header.top .live-dot.ok{
+  background:#34d399;
+  box-shadow:0 0 0 3px rgba(52,211,153,.25);
+}
+header.top .live-dot.err{
+  background:#f87171;
+  box-shadow:0 0 0 3px rgba(248,113,113,.25);
+}
+header.top .live-dot.syncing{
+  background:#fbbf24;
+  box-shadow:0 0 0 3px rgba(251,191,36,.25);
+}
+@keyframes liveDotBreathe{
+  0%,100%{ transform:scale(1); opacity:1; }
+  50%{ transform:scale(1.35); opacity:.6; }
+}
+header.top .live-dot.ok{ animation:liveDotBreathe 2.4s ease-in-out infinite; }
+header.top .live-dot.syncing{ animation:livePulse 1s infinite; }
+
  
 </style>
 </head>
@@ -726,8 +1015,17 @@ box-shadow:
 </div>
 
 <header class="top" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:4px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <h1 style="font-size:26px;margin:0;font-weight:900;letter-spacing:-.02em">Giza Ops</h1>
+    <div class="brand-row">
+      <div class="brand-id">
+        <div class="brand-mark"><span>t</span></div>
+        <div class="brand-text">
+          <h1>Giza Ops</h1>
+          <span class="brand-sub">talabat · operations control tower</span>
+        </div>
+      </div>
+    </div>
+    <div id="headerKpis" class="header-kpis"></div>
+    <div style="display:flex;align-items:center;justify-content:flex-start">
       <div class="vmode" id="vmodeBar">
         <button class="active" onclick="setViewMode('day')" id="vDay">📅 Day</button>
         <button onclick="setViewMode('week')" id="vWeek">📆 Week</button>
@@ -765,15 +1063,13 @@ box-shadow:
       <button id="editBtn" onclick="toggleEdit()" style="font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)">✎ Edit</button>
       <button id="darkToggle" onclick="toggleDarkMode()" title="Toggle Dark Mode" style="font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)">🌙</button>
     </div>
+    <div class="live-bar" id="liveBar">
+      <span class="live-dot ok" id="liveDot"></span>
+      <span class="live-txt" id="liveTxt"><b>Connecting to sheet…</b></span>
+      <span class="live-next" id="liveNext"></span>
+      <button class="live-manual" onclick="liveRefreshNow()">↻ Sync now</button>
+    </div>
   </header>
-
-  <!-- Live sync status bar -->
-  <div class="live-bar" id="liveBar">
-    <span class="live-dot ok" id="liveDot"></span>
-    <span class="live-txt" id="liveTxt"><b>جاري الاتصال بالشيت…</b></span>
-    <span class="live-next" id="liveNext"></span>
-    <button class="live-manual" onclick="liveRefreshNow()">↻ الآن</button>
-  </div>
 
   <!-- Apps Script URL Setup Modal -->
   <div id="scriptSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center">
@@ -4727,8 +5023,77 @@ async function confirmAddZone(){
   setTimeout(()=>{toggleAddZone();curTab=id;render();},800);
 }
 
+function renderHeaderKpis(){
+  const el=document.getElementById("headerKpis");
+  if(!el) return;
+  let totalOrders=0, totalRiders=0, totalWH=0, sumOnTime=0, nOnTime=0, prevOrders=0;
+  ZONES.forEach(function(z){
+    const hasData = META.some(m=>{const r=evalMetric(z.id,m); return r.t>0||r.p>0;});
+    if(!hasData) return;
+    totalOrders += val(z.id,"orders",0);
+    prevOrders  += val(z.id,"orders",1);
+    totalRiders += val(z.id,"active_riders",0);
+    totalWH     += val(z.id,"working_hours",0);
+    const ot = val(z.id,"on_time",0);
+    if(ot>0){ sumOnTime += ot; nOnTime++; }
+  });
+  const avgOnTime = nOnTime>0 ? (sumOnTime/nOnTime) : 0;
+  const ordersDelta = prevOrders>0 ? (((totalOrders-prevOrders)/prevOrders)*100) : 0;
+  const deltaCls = ordersDelta>=0 ? "up" : "down";
+  const deltaArrow = ordersDelta>=0 ? "▲" : "▼";
+
+  el.innerHTML =
+    '<div class="hk-item" data-count="'+Math.round(totalOrders)+'">'
+      +'<span class="hk-label">Total Orders</span>'
+      +'<span class="hk-value" id="hkOrders">0</span>'
+      +'<span class="hk-delta '+deltaCls+'">'+deltaArrow+' '+Math.abs(ordersDelta).toFixed(1)+'%</span>'
+    +'</div>'
+    +'<div class="hk-sep"></div>'
+    +'<div class="hk-item" data-count="'+Math.round(totalRiders)+'">'
+      +'<span class="hk-label">Active Riders</span>'
+      +'<span class="hk-value" id="hkRiders">0</span>'
+    +'</div>'
+    +'<div class="hk-sep"></div>'
+    +'<div class="hk-item" data-count="'+Math.round(totalWH)+'">'
+      +'<span class="hk-label">Working Hours</span>'
+      +'<span class="hk-value" id="hkWH">0</span>'
+    +'</div>'
+    +'<div class="hk-sep"></div>'
+    +'<div class="hk-item" data-count="'+avgOnTime.toFixed(1)+'" data-suffix="%">'
+      +'<span class="hk-label">Avg On-Time</span>'
+      +'<span class="hk-value" id="hkOnTime">0%</span>'
+    +'</div>';
+
+  animateHeaderCounters(el);
+}
+
+function animateHeaderCounters(container){
+  const items = container.querySelectorAll(".hk-item");
+  items.forEach(function(item){
+    const target = parseFloat(item.getAttribute("data-count"))||0;
+    const suffix = item.getAttribute("data-suffix")||"";
+    const valEl = item.querySelector(".hk-value");
+    if(!valEl) return;
+    const isDecimal = suffix==="%";
+    const duration = 900;
+    const start = performance.now();
+    function tick(now){
+      const p = Math.min(1,(now-start)/duration);
+      const eased = 1-Math.pow(1-p,3);
+      const cur = target*eased;
+      valEl.textContent = isDecimal
+        ? cur.toFixed(1)+suffix
+        : Math.round(cur).toLocaleString("en-US")+suffix;
+      if(p<1) requestAnimationFrame(tick);
+      else valEl.textContent = isDecimal ? target.toFixed(1)+suffix : Math.round(target).toLocaleString("en-US")+suffix;
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
 function render(){
   renderTabs();
+  renderHeaderKpis();
   const ov=document.getElementById("overview");
   const zv=document.getElementById("zoneview");
   const lv=document.getElementById("logview");
@@ -4775,9 +5140,9 @@ document.addEventListener("click", function(e){
   if(pp && state.labels.prev) pp.value = state.labels.prev;
   applyViewModeToState();
   render();
-  setLiveStatus("syncing", "⏳ <b>جاري التحديث من الشيت…</b>", "");
+  setLiveStatus("syncing", "⏳ <b>Syncing from sheet…</b>", "");
 
-  // ④ ابدأ الـ live polling (بيسحب من الشيت فوراً + كل 5 دقايق)
+  // start live polling (fetches from sheet immediately + every 5 min)
   startLivePolling();
 })();
 
@@ -4812,10 +5177,10 @@ function startCountdown(){
     const mins = Math.floor(secs / 60);
     const ss   = String(secs % 60).padStart(2,"0");
     const when  = lastRefreshedAt
-      ? "آخر تحديث: " + formatTime(lastRefreshedAt)
-      : "لم يتم مزامنة بعد";
+      ? "Last sync: " + formatTime(lastRefreshedAt)
+      : "Not synced yet";
     document.getElementById("liveNext").textContent =
-      "التالي: " + (mins>0 ? mins+"د "+ss+"ث" : ss+"ث");
+      "Next in: " + (mins>0 ? mins+"m "+ss+"s" : ss+"s");
     document.getElementById("liveTxt").innerHTML =
       "<b>" + when + "</b>";
   }, 1000);
@@ -4823,7 +5188,7 @@ function startCountdown(){
 
 function formatTime(ts){
   const d = new Date(ts);
-  return d.toLocaleTimeString("ar-EG", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+  return d.toLocaleTimeString("en-US", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
 }
 
 /* core fetch-and-refresh logic (shared by auto + manual) */
@@ -4833,14 +5198,14 @@ async function liveRefresh(silent){
   // لو مفيش URL، وريّ الـ setup prompt
   if(!AUTO_SYNC_URL){
     setLiveStatus("err",
-      "⚙ <b>محتاج Script URL عشان يتحدث تلقائياً</b> — " +
-      "<button onclick='openScriptSetup()' style='font-size:12px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:3px 10px;cursor:pointer;margin-right:4px'>إعداد الـ URL</button>",
+      "⚙ <b>Script URL needed for auto-sync</b> — " +
+      "<button onclick='openScriptSetup()' style='font-size:12px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:3px 10px;cursor:pointer;margin-right:4px'>Set up URL</button>",
       "");
     return;
   }
 
   liveRunning = true;
-  setLiveStatus("syncing", "⏳ <b>جاري التحديث من الشيت…</b>", "");
+  setLiveStatus("syncing", "⏳ <b>Syncing from sheet…</b>", "");
 
   try{
     const csv = await fetchSheetCSV();
@@ -4849,7 +5214,7 @@ async function liveRefresh(silent){
     const zids = Object.keys(result);
 
     if(zids.length === 0){
-      setLiveStatus("err", "⚠ <b>الشيت اتحمل بس مفيش داتا</b> — تأكد من أسماء الأعمدة (Zone, Date)", "");
+      setLiveStatus("err", "⚠ <b>Sheet loaded but no data found</b> — check column names (Zone, Date)", "");
       return;
     }
 
@@ -4878,13 +5243,13 @@ async function liveRefresh(silent){
     lastRefreshedAt = Date.now();
     setLiveStatus("ok",
       "<b>✅ " + state.labels.today + " vs " + state.labels.prev + "</b>" +
-      " — " + zids.length + " زون، " + dates.length + " يوم",
+      " — " + zids.length + " zones, " + dates.length + " days",
       "");
 
   } catch(e){
     setLiveStatus("err",
-      "⚠ <b>فشل الاتصال</b> — <span style='font-size:11px;color:var(--muted)'>" + e.message + "</span> " +
-      "<button onclick='openScriptSetup()' style='font-size:11px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:2px 8px;cursor:pointer'>تعديل URL</button>",
+      "⚠ <b>Connection failed</b> — <span style='font-size:11px;color:var(--muted)'>" + e.message + "</span> " +
+      "<button onclick='openScriptSetup()' style='font-size:11px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:6px;padding:2px 8px;cursor:pointer'>Edit URL</button>",
       "");
   } finally{
     liveRunning = false;
