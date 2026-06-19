@@ -4946,4 +4946,121 @@ async function autoSyncOnLoad(){
 
 </script>
 </body>
+  <style>
+/* 1. تأثير الزجاج الفخم (Glassmorphism) للهيدر */
+header, .header-container {
+    position: sticky !important;
+    top: 0;
+    z-index: 1000 !important;
+    background: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 2. تفاعلات اللمس (Micro-interactions) للكاردات والأزرار */
+div[style*="border-radius"], button, .card {
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease !important;
+}
+
+div[style*="border-radius"]:active, button:active, .card:active {
+    transform: scale(0.97) !important; /* انكماش ناعم عند الضغط */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+}
+
+/* 3. أنيميشن الدخول (Staggered Fade-in) */
+@keyframes premiumSlideUp {
+    0% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.premium-animate {
+    opacity: 0; /* يبدأ مخفي */
+    animation: premiumSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 4. انسيابية الجداول (Smooth Slide-down) */
+.smooth-expand {
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s ease;
+}
+
+/* 5. ترقية التابات (Tabs) للون طلبات البرتقالي */
+nav {
+    display: flex;
+    gap: 15px;
+    padding-bottom: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+nav::-webkit-scrollbar { display: none; }
+
+nav span, nav button {
+    font-weight: 600 !important;
+    color: #64748b !important;
+    padding-bottom: 8px !important;
+    transition: color 0.2s ease !important;
+    cursor: pointer;
+    position: relative;
+}
+
+/* التاب النشط */
+nav span[style*="font-weight: bold"], nav span.active, nav button.active {
+    color: #FF5E00 !important; /* برتقالي طلبات */
+    border-bottom: none !important;
+}
+
+nav span[style*="font-weight: bold"]::after, nav span.active::after, nav button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #FF5E00;
+    border-radius: 3px 3px 0 0;
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    
+    // --- 1. تطبيق أنيميشن الدخول (Staggered) على كل الكاردات ---
+    // بنستهدف كل العناصر اللي شكلها كارد (واخدة border أو padding)
+    const allCards = document.querySelectorAll('div[style*="border"], .card, section');
+    
+    allCards.forEach((card, index) => {
+        // نستثني الهيدر عشان ميعملش أنيميشن
+        if(!card.closest('header')) {
+            card.classList.add('premium-animate');
+            // كل كارد بيتأخر شوية عن اللي قبله (تأثير تتابعي)
+            card.style.animationDelay = `${(index % 10) * 0.08}s`; 
+        }
+    });
+
+    // --- 2. تحسين جداول الـ 3PL (Smooth Expand) ---
+    // دي فكرة عشان لو عندك جداول بتفتح وتقفل، تشتغل بنعومة
+    const rows = document.querySelectorAll('tr, .row-expandable');
+    rows.forEach(row => {
+        row.addEventListener('click', function() {
+            const detailView = this.nextElementSibling;
+            if (detailView && detailView.classList.contains('details-row')) {
+                // كود بسيط لعمل Slide down
+                if (detailView.style.maxHeight) {
+                    detailView.style.maxHeight = null;
+                } else {
+                    detailView.style.maxHeight = detailView.scrollHeight + "px";
+                }
+            }
+        });
+    });
+
+    // --- 3. استبدال لوجو النص بستايل طلبات (اختياري لو مكنتش عملته) ---
+    const mainTitle = document.querySelector('header h1, header .title');
+    if(mainTitle && !mainTitle.innerHTML.includes('talabat')) {
+        mainTitle.innerHTML = `<span style="color:#FF5E00; font-weight:900; font-style:italic; letter-spacing:-1px;">talabat</span> | <span style="font-size: 18px; color: #1e293b;">Giza Ops</span>`;
+    }
+});
+</script>
 </html>
