@@ -3411,7 +3411,7 @@ async function saveMetricTargets(){
   localStorage.setItem("metricTargets", JSON.stringify(metricTargets));
   // Save to sheet
   try{
-    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
+    const TARGETS_URL = "https://script.google.com/macros/s/AKfycbw3x-aqxA4coodkhZnzbAgT1sKqVMlOUUlf-aRlira0Qs4wlZyidxzW4MRyXVZQ9nR3/exec";
     await fetch(TARGETS_URL,{
       method:"POST",
       body:JSON.stringify({type:"saveTargets", targets:metricTargets})
