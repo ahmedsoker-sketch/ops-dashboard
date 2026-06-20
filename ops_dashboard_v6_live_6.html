@@ -1252,6 +1252,7 @@ header.top .live-dot.syncing{ animation:livePulse 1s infinite; }
   <div id="targetview" class="hidden"></div>
   <div id="exportview" class="hidden"></div>
   <div id="analysisview" class="hidden"></div>
+  <div id="followupview" class="hidden"></div>
 
   <div class="legend">
     <h3>How to read the colors</h3>
@@ -1703,6 +1704,7 @@ function renderTabs(){
   }
   t.appendChild(mk('log','Action Log'+(totalActions>0?' ('+totalActions+')':'')));
   t.appendChild(mk('tasks','📋 Tasks'));
+  t.appendChild(mk('followup','🤝 3PL Performance'));
   t.appendChild(mk('briefing','☀️ Briefing'));
   t.appendChild(mk('targets','🎯 Targets'));
   t.appendChild(mk('export','📤 Export'));
@@ -2059,6 +2061,422 @@ function findWHDateCol(dateLabel){
     if(dm && parseInt(dm[1])===mo && parseInt(dm[2])===day) return i;
   }
   return -1;
+}
+
+/* ════════════════════════════════════════════
+   🤝 3PL PERFORMANCE — hours commitments & follow-up
+   Sheet: "3PL FollowUp" — columns: id, zone, threePl, hours, deadline, createdAt, createdBy
+   ════════════════════════════════════════════ */
+const FOLLOWUP_URL = ACTIONS_SCRIPT_URL; // same Apps Script
+let followUpsCache = []; // [{id, zone, threePl, hours, deadline, createdAt, createdBy}]
+let followUpsLoadedOK = false;
+let showAddFollowUp = false;
+
+async function loadFollowUps(retrying){
+  try{
+    const resp = await fetch(FOLLOWUP_URL+"?action=getFollowUps",{cache:"no-store"});
+    if(!resp.ok){
+      console.error("loadFollowUps: HTTP",resp.status);
+      if(!retrying) return loadFollowUps(true);
+      return;
+    }
+    const text = await resp.text();
+    if(!text || text.startsWith("ERROR")){
+      console.error("loadFollowUps: bad response",text);
+      if(!retrying) return loadFollowUps(true);
+      return;
+    }
+    const parsed = JSON.parse(text);
+    if(!Array.isArray(parsed)){ console.error("loadFollowUps: unexpected payload",text); return; }
+    followUpsCache = parsed;
+    followUpsLoadedOK = true;
+    if(curTab==="followup") renderFollowUps();
+  }catch(e){
+    console.error("loadFollowUps:",e);
+    if(!retrying) return loadFollowUps(true);
+  }
+}
+
+/* Convert an ISO date (YYYY-MM-DD, from <input type=date>) to the "Jun 13"
+   label format used elsewhere in the dashboard (findWHDateCol, etc). */
+function isoToShortLabel(iso){
+  if(!iso) return "";
+  const parts = iso.split("-");
+  if(parts.length!==3) return "";
+  const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const mo = parseInt(parts[1],10);
+  const day = parseInt(parts[2],10);
+  if(!mo||!day) return "";
+  return months[mo-1]+" "+day;
+}
+
+/* Look up actual hours a given 3PL worked, in a given zone, on a given ISO date.
+   Returns null if we have no WH data for that zone/3PL/date combination. */
+function getActualHoursFor3PL(zid, threePl, isoDate){
+  const zd = whCache[zid];
+  if(!zd) return null;
+  const label = isoToShortLabel(isoDate);
+  const colIdx = findWHDateCol(label);
+  if(colIdx<0) return null;
+  // Match 3PL name case-insensitively/trimmed (sheet names can vary slightly in casing)
+  const key = Object.keys(zd).find(n => n.trim().toLowerCase() === String(threePl).trim().toLowerCase());
+  if(!key) return null;
+  const hoursArr = zd[key];
+  if(!hoursArr) return null;
+  const v = hoursArr[colIdx];
+  return (v==null || isNaN(v)) ? null : Math.round(v);
+}
+
+/* Returns the list of 3PL names with WH data available for a given zone —
+   used to populate the 3PL dropdown once a Zone is picked. */
+function get3PLNamesForZone(zid){
+  const zd = whCache[zid];
+  if(!zd) return [];
+  return Object.keys(zd).sort((a,b)=>a.localeCompare(b));
+}
+
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+async function addFollowUp(){
+  const zone = document.getElementById("fu-zone")?.value||"";
+  const threePl = document.getElementById("fu-3pl")?.value||"";
+  const hours = parseFloat(document.getElementById("fu-hours")?.value);
+  const deadline = document.getElementById("fu-deadline")?.value||"";
+
+  if(!zone || !threePl || !hours || hours<=0 || !deadline){
+    alert("Please fill in Zone, 3PL, Hours (a positive number), and Deadline.");
+    return;
+  }
+
+  const payload = { zone, threePl, hours, deadline, createdBy: "" };
+  try{
+    const resp = await fetch(FOLLOWUP_URL,{
+      method:"POST",
+      body:JSON.stringify({type:"addFollowUp", followup:payload})
+    });
+    const text = await resp.text().catch(()=> "");
+    if(text && text.indexOf("ERROR:")===0){
+      const reason = text.slice("ERROR:".length).trim();
+      showTaskToast("⛔ Couldn't save: "+reason, "err");
+      return;
+    }
+    if(!resp.ok){
+      showTaskToast("⚠ Save failed (server error). Please retry.", "err");
+      return;
+    }
+    showTaskToast("✅ Commitment added for "+threePl+" — "+hours+"h by "+deadline+".", "ok");
+    showAddFollowUp = false;
+    await loadFollowUps(); // refresh from the sheet so the new row + id are accurate
+    renderFollowUps();
+  }catch(e){
+    console.error("addFollowUp:",e);
+    showTaskToast("⚠ Save failed (no connection). Please retry.", "err");
+  }
+}
+
+async function deleteFollowUpEntry(id){
+  if(!confirm("Delete this commitment?")) return;
+  try{
+    const resp = await fetch(FOLLOWUP_URL,{
+      method:"POST",
+      body:JSON.stringify({type:"deleteFollowUp", id})
+    });
+    if(!resp.ok){
+      showTaskToast("⚠ Delete failed (server error).", "err");
+      return;
+    }
+    followUpsCache = followUpsCache.filter(f=>f.id!==id);
+    showTaskToast("🗑 Commitment deleted.", "ok");
+    renderFollowUps();
+  }catch(e){
+    console.error("deleteFollowUpEntry:",e);
+    showTaskToast("⚠ Delete failed (no connection).", "err");
+  }
+}
+
+// Separate filter state for the 3PL Performance tab (independent from the Analysis tab's filters)
+let fpZoneMulti = new Set();   // multi-select zones (empty = all)
+let fpNameFilter = "all";      // filter by 3PL name
+
+function renderFollowUps(){
+  const fv = document.getElementById("followupview");
+  if(!fv) return;
+
+  const zoneOptions = ZONES.map(z=>`<option value="${z.id}">${z.name}</option>`).join("");
+
+  const addForm = showAddFollowUp ? `
+    <div class="panel" style="margin-bottom:16px;padding:16px">
+      <h3 style="margin:0 0 14px;font-size:14px">➕ New Commitment</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Zone *</label>
+          <select id="fu-zone" onchange="onFollowUpZoneChange()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;background:var(--card);color:var(--ink)">
+            <option value="">— Select Zone —</option>
+            ${zoneOptions}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">3PL *</label>
+          <select id="fu-3pl" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;background:var(--card);color:var(--ink)">
+            <option value="">— Select Zone first —</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Hours Committed *</label>
+          <input id="fu-hours" type="number" min="1" step="1" placeholder="e.g. 600" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Deadline *</label>
+          <input id="fu-deadline" type="date" value="${todayISO()}" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">
+        We'll compare this commitment against the 3PL's <b>actual hours on the deadline date</b> (from the 3PL WH sheet) once that date's data is available.
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="addFollowUp()" style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 20px;border-radius:10px;cursor:pointer;background:var(--accent);color:#fff;border:none">Save Commitment</button>
+        <button onclick="showAddFollowUp=false;renderFollowUps()" style="font-family:inherit;font-size:13px;padding:9px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line)">Cancel</button>
+      </div>
+    </div>` : "";
+
+  const syncBanner = (!followUpsLoadedOK)
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--watch-bg);border:1px solid var(--watch-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--watch)">
+         <span>⏳</span><span><b>Loading commitments from the sheet…</b></span>
+       </div>`
+    : "";
+
+  // ── Commitment status rows ──
+  const commitRows = followUpsCache.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+    const zone = ZONES.find(z=>z.id===f.zone);
+    const zoneName = zone ? zone.name : f.zone;
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+    let statusBadge;
+    if(actual==null){
+      statusBadge = deadlinePassed
+        ? `<span class="chip watch">⏳ No data yet for ${escapeAttr(f.deadline)}</span>`
+        : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+    } else if(actual >= f.hours){
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+    } else {
+      statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+    }
+
+    return `
+      <tr>
+        <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeAttr(zoneName)}</td>
+        <td style="padding:9px 8px;font-weight:700;font-size:13px">${escapeAttr(f.threePl)}</td>
+        <td style="padding:9px 8px;text-align:center" class="num">${f.hours}h</td>
+        <td style="padding:9px 8px;text-align:center">${escapeAttr(f.deadline)}</td>
+        <td style="padding:9px 8px;text-align:center" class="num">${actual!=null ? actual+"h" : "—"}</td>
+        <td style="padding:9px 8px;text-align:center">${statusBadge}</td>
+        <td style="padding:9px 8px;text-align:center"><button onclick="deleteFollowUpEntry('${escapeAttr(f.id)}')" style="font-size:11px;padding:4px 10px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">✕</button></td>
+      </tr>`;
+  }).join("");
+
+  const totalCommits = followUpsCache.length;
+  const achieved = followUpsCache.filter(f=>{
+    const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+    return a!=null && a>=f.hours;
+  }).length;
+  const notAchieved = followUpsCache.filter(f=>{
+    const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+    return a!=null && a<f.hours;
+  }).length;
+  const pendingCount = totalCommits - achieved - notAchieved;
+
+  const commitmentsBlock = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:22px 0 14px">
+      <div>
+        <div style="font-size:15px;font-weight:800;margin-bottom:4px">🤝 Hours Commitments</div>
+        <div style="font-size:12.5px;color:var(--muted)">
+          ${totalCommits} commitment${totalCommits!==1?"s":""} ·
+          <span style="color:var(--good)">${achieved} achieved</span> ·
+          <span style="color:var(--bad)">${notAchieved} not achieved</span> ·
+          <span style="color:var(--watch)">${pendingCount} pending</span>
+        </div>
+      </div>
+      <button onclick="showAddFollowUp=true;renderFollowUps()"
+        style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;
+        background:var(--accent);color:#fff;border:none;box-shadow:0 2px 8px rgba(255,90,0,.25)">
+        ➕ Add Commitment
+      </button>
+    </div>
+    ${addForm}
+    <div class="panel">
+      ${totalCommits===0
+        ? `<div class="logempty">No commitments logged yet. Click "Add Commitment" to log an hours promise from a 3PL.</div>`
+        : `<div style="overflow-x:auto"><table style="min-width:680px"><thead><tr>
+             <th style="padding:9px 12px;text-align:left">Zone</th><th style="padding:9px 8px">3PL</th><th style="padding:9px 8px">Hours Committed</th>
+             <th style="padding:9px 8px">Deadline</th><th style="padding:9px 8px">Actual Hours</th><th style="padding:9px 8px">Status</th><th></th>
+           </tr></thead><tbody>${commitRows}</tbody></table></div>`}
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6">
+      Actual hours are read from the <b>3PL WH</b> sheet for the exact deadline date. If that date hasn't synced yet, the status shows as pending.
+    </div>`;
+
+  // ── 3PL performance table (now lives only here, in the 3PL Performance tab) ──
+  fv.innerHTML = `${syncBanner}${build3PLPerformanceTable()}${commitmentsBlock}`;
+}
+
+/* Builds the 3PL performance comparison table (hours vs target, trend, etc),
+   using this tab's own filter state (fpZoneMulti/fpNameFilter). */
+function build3PLPerformanceTable(){
+  const fmtH = v => v!=null && v>0 ? Math.round(v).toLocaleString()+"h" : "—";
+  const fmtGap = (v, tgt) => {
+    if(v==null||v===0||tgt==null) return {str:"—", good:null};
+    const g = Math.round(v - tgt);
+    return {str:(g>=0?"+":"")+g+"h", good:g>=0};
+  };
+
+  const allTplNames = [...new Set(
+    ZONES.flatMap(z=>Object.keys(whCache[z.id]||{}))
+  )].sort();
+
+  const activeZones = fpZoneMulti.size===0 ? ZONES : ZONES.filter(z=>fpZoneMulti.has(z.id));
+
+  const nameOpts = `<option value="all" ${fpNameFilter==="all"?"selected":""}>All 3PLs</option>`
+    + allTplNames.map(n=>`<option value="${escapeHtml(n)}" ${fpNameFilter===n?"selected":""}>${escapeHtml(n)}</option>`).join("");
+
+  const rows = [];
+  activeZones.forEach(z=>{
+    const zd = whCache[z.id];
+    if(!zd) return;
+    const n = whDates.length;
+
+    Object.entries(zd).forEach(([name, hoursArr])=>{
+      if(fpNameFilter!=="all" && name!==fpNameFilter) return;
+      const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
+
+      let lastIdx = -1;
+      for(let i=n-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ lastIdx=i; break; } }
+      if(lastIdx < 0) return;
+
+      const latestVal = hoursArr[lastIdx];
+      const latestDate = whDates[lastIdx] || "";
+
+      let prevVal = null, prevDate = "";
+      for(let i=lastIdx-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ prevVal=hoursArr[i]; prevDate=whDates[i]||""; break; } }
+
+      const w7vals = hoursArr.slice(Math.max(0, lastIdx-6), lastIdx+1).filter(v=>v!=null&&v>0);
+      const weekAvg = w7vals.length ? w7vals.reduce((a,b)=>a+b,0)/w7vals.length : null;
+
+      const mtdVals = hoursArr.filter(v=>v!=null&&v>0);
+      const mtdAvg = mtdVals.length ? mtdVals.reduce((a,b)=>a+b,0)/mtdVals.length : null;
+
+      const trend = (latestVal!=null&&prevVal!=null)
+        ? (latestVal > prevVal*1.01 ? "↑" : latestVal < prevVal*0.99 ? "↓" : "→")
+        : "—";
+      const trendClr = trend==="↑"?"var(--good)":trend==="↓"?"var(--bad)":"var(--muted)";
+
+      rows.push({name, zoneName:z.name, zid:z.id, tgt,
+        latestVal, latestDate, prevVal, prevDate, weekAvg, mtdAvg, trend, trendClr});
+    });
+  });
+
+  if(!rows.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available.</div></div>`;
+
+  rows.sort((a,b)=>{
+    const gA = (a.latestVal&&a.tgt) ? a.latestVal-a.tgt : 0;
+    const gB = (b.latestVal&&b.tgt) ? b.latestVal-b.tgt : 0;
+    return gA-gB;
+  });
+
+  const showZone = activeZones.length > 1;
+
+  const tableRows = rows.map(r=>{
+    const latGap  = fmtGap(r.latestVal, r.tgt);
+    const weekGap = fmtGap(r.weekAvg,   r.tgt);
+    const mtdGap  = fmtGap(r.mtdAvg,    r.tgt);
+    const latClr  = latGap.good===true?"var(--good)":latGap.good===false?"var(--bad)":"var(--muted)";
+    const weekClr = weekGap.good===true?"var(--good)":weekGap.good===false?"var(--bad)":"var(--muted)";
+    const mtdClr  = mtdGap.good===true?"var(--good)":mtdGap.good===false?"var(--bad)":"var(--muted)";
+    const latBg   = latGap.good===false?"var(--bad-bg)":latGap.good===true?"var(--good-bg)":"";
+    const weekBg  = weekGap.good===false?"var(--bad-bg)":weekGap.good===true?"var(--good-bg)":"";
+    const mtdBg   = mtdGap.good===false?"var(--bad-bg)":mtdGap.good===true?"var(--good-bg)":"";
+
+    return `<tr>
+      <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeHtml(r.name)}</td>
+      ${showZone?`<td style="padding:9px 8px;font-size:12px;color:var(--muted)">${r.zoneName}</td>`:""}
+      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">
+        <div>${fmtH(r.prevVal)}</div>
+        <div style="font-size:9px;color:var(--muted)">${r.prevDate||""}</div>
+      </td>
+      <td style="padding:9px 8px;text-align:center;background:${latBg}">
+        <div style="font-size:13px;font-weight:700">${fmtH(r.latestVal)}</div>
+        <div style="font-size:10px;color:${latClr};font-weight:800">${latGap.str}</div>
+        <div style="font-size:9px;color:var(--muted)">${r.latestDate}</div>
+      </td>
+      <td style="padding:9px 8px;text-align:center;background:${weekBg}">
+        <div style="font-size:12px;font-weight:700">${fmtH(r.weekAvg!=null?Math.round(r.weekAvg):null)}</div>
+        <div style="font-size:10px;color:${weekClr};font-weight:800">${weekGap.str}</div>
+      </td>
+      <td style="padding:9px 8px;text-align:center;background:${mtdBg}">
+        <div style="font-size:12px;font-weight:700">${fmtH(r.mtdAvg!=null?Math.round(r.mtdAvg):null)}</div>
+        <div style="font-size:10px;color:${mtdClr};font-weight:800">${mtdGap.str}</div>
+      </td>
+      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.tgt)}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:18px;font-weight:800;color:${r.trendClr}">${r.trend}</td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="panel" style="overflow-x:auto">
+    <div style="padding:4px 0 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
+        <select onchange="fpNameFilter=this.value;renderFollowUps()"
+          style="padding:7px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
+          background:var(--ink2);color:#fff;cursor:pointer;min-width:140px">
+          ${nameOpts}
+        </select>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+        <button onclick="fpZoneMulti.clear();renderFollowUps()"
+          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;
+          ${fpZoneMulti.size===0?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All</button>
+        ${ZONES.map(z=>`<button onclick="if(fpZoneMulti.has('${z.id}')){fpZoneMulti.delete('${z.id}');}else{fpZoneMulti.add('${z.id}');}renderFollowUps()"
+          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
+          ${fpZoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+          ${z.name.replace(" Area","").replace("October ","Oct ")}</button>`).join("")}
+      </div>
+    </div>
+    <table style="min-width:${showZone?"720px":"580px"}">
+      <thead><tr>
+        <th style="padding:9px 12px;text-align:left">3PL</th>
+        ${showZone?`<th style="padding:9px 8px">Zone</th>`:""}
+        <th style="padding:9px 8px;text-align:center">Prev Day</th>
+        <th style="padding:9px 8px;text-align:center">Latest</th>
+        <th style="padding:9px 8px;text-align:center">Last 7 Days</th>
+        <th style="padding:9px 8px;text-align:center">MTD</th>
+        <th style="padding:9px 8px;text-align:center">Target</th>
+        <th style="padding:9px 8px;text-align:center">Trend</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);padding:10px 12px">
+      Latest = last day with data · Sorted by gap vs target (worst first)
+    </div>
+  </div>`;
+}
+
+function onFollowUpZoneChange(){
+  const zid = document.getElementById("fu-zone")?.value;
+  const sel = document.getElementById("fu-3pl");
+  if(!sel) return;
+  if(!zid){
+    sel.innerHTML = `<option value="">— Select Zone first —</option>`;
+    return;
+  }
+  const names = get3PLNamesForZone(zid);
+  if(names.length===0){
+    sel.innerHTML = `<option value="">— No 3PL data for this zone —</option>`;
+    return;
+  }
+  sel.innerHTML = `<option value="">— Select 3PL —</option>` + names.map(n=>`<option value="${n}">${n}</option>`).join("");
 }
 
 async function loadSharedActions(){
@@ -3684,11 +4102,9 @@ function buildWeeklySummaryHTML(){
 /* ════════════════════════════════════════════
    🔬 ANALYSIS TAB
    ════════════════════════════════════════════ */
-let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly" | "3pl"
+let analysisSection = "deep-dive"; // "deep-dive" | "gap-summary" | "momentum" | "anomaly" — "3pl" removed, now its own "🤝 3PL Performance" tab
 let tplZoneFilter = "all";
 let tplDateFilter = null;
-let tplNameFilter = "all";       // filter by 3PL name
-let tplZoneMulti  = new Set();   // multi-select zones (empty = all)
 let deepDiveMetric  = "on_time";
 
 function renderAnalysis(){
@@ -3700,6 +4116,11 @@ function renderAnalysis(){
     ${analysisSection===s?"background:var(--accent);color:#fff;border-color:var(--accent)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
     ${label}</button>`;
 
+  // "3pl" used to be its own sub-section here, but it's now fully covered by
+  // the dedicated "🤝 3PL Performance" tab — redirect away from it if a saved
+  // session still has it selected, so we never render a dead section.
+  if(analysisSection==="3pl") analysisSection="deep-dive";
+
   let html = `
   <div style="margin-bottom:16px">
     <div style="font-size:18px;font-weight:800;margin-bottom:12px">🔬 Analysis</div>
@@ -3708,7 +4129,6 @@ function renderAnalysis(){
       ${secBtn("gap-summary","🎯 Gap to Target")}
       ${secBtn("momentum","📈 Momentum")}
       ${secBtn("anomaly","🚨 Anomaly Detection")}
-      ${secBtn("3pl","🚚 3PL Analysis")}
     </div>
   </div>`;
 
@@ -3716,7 +4136,6 @@ function renderAnalysis(){
   else if(analysisSection==="gap-summary") html += buildGapSummary(today);
   else if(analysisSection==="momentum")    html += buildMomentum(today);
   else if(analysisSection==="anomaly")     html += buildAnomaly(today);
-  else if(analysisSection==="3pl")         html += build3PLAnalysis(today);
 
   av.innerHTML = html;
 }
@@ -4266,169 +4685,6 @@ async function sendTaskEmailNotification(task){
   }catch(e){
     console.log("Email send error:", e);
   }
-}
-
-/* ════════════════════════════════════════════
-   🚚 3PL ANALYSIS
-   ════════════════════════════════════════════ */
-function build3PLAnalysis(today){
-  const fmtH = v => v!=null && v>0 ? Math.round(v).toLocaleString()+"h" : "—";
-  const fmtGap = (v, tgt) => {
-    if(v==null||v===0||tgt==null) return {str:"—", good:null};
-    const g = Math.round(v - tgt);
-    return {str:(g>=0?"+":"")+g+"h", good:g>=0};
-  };
-
-  // Collect all 3PL names across all zones
-  const allTplNames = [...new Set(
-    ZONES.flatMap(z=>Object.keys(whCache[z.id]||{}))
-  )].sort();
-
-  // Zone multi-select: if empty = all
-  const activeZones = tplZoneMulti.size===0 ? ZONES : ZONES.filter(z=>tplZoneMulti.has(z.id));
-
-  // Zone checkboxes
-  const zoneCheckboxes = ZONES.map(z=>{
-    const checked = tplZoneMulti.size===0 || tplZoneMulti.has(z.id);
-    return `<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
-      <input type="checkbox" ${checked?"checked":""} onchange="
-        if(this.checked){ tplZoneMulti.delete('${z.id}'); if(tplZoneMulti.size===0){} }
-        else { if(tplZoneMulti.size===0) ZONES.forEach(zz=>tplZoneMulti.add(zz.id)); tplZoneMulti.delete('${z.id}'); if(tplZoneMulti.size===ZONES.length) tplZoneMulti.clear(); }
-        renderAnalysis()">
-      ${z.name.replace(/ Area/,"").replace(/October /,"Oct ")}
-    </label>`;
-  }).join("");
-
-  // 3PL name filter
-  const nameOpts = `<option value="all" ${tplNameFilter==="all"?"selected":""}>All 3PLs</option>`
-    + allTplNames.map(n=>`<option value="${escapeHtml(n)}" ${tplNameFilter===n?"selected":""}>${escapeHtml(n)}</option>`).join("");
-
-  const rows = [];
-  activeZones.forEach(z=>{
-    const zd = whCache[z.id];
-    if(!zd) return;
-    const n = whDates.length;
-
-    Object.entries(zd).forEach(([name, hoursArr])=>{
-      if(tplNameFilter!=="all" && name!==tplNameFilter) return;
-      const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
-
-      // Find last day with real data (>0)
-      let lastIdx = -1;
-      for(let i=n-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ lastIdx=i; break; } }
-      if(lastIdx < 0) return; // no data at all
-
-      // Latest = last real day
-      const latestVal = hoursArr[lastIdx];
-      const latestDate = whDates[lastIdx] || "";
-
-      // Prev day = last real day before lastIdx
-      let prevVal = null, prevDate = "";
-      for(let i=lastIdx-1; i>=0; i--){ if(hoursArr[i]!=null && hoursArr[i]>0){ prevVal=hoursArr[i]; prevDate=whDates[i]||""; break; } }
-
-      // Last 7 days avg (real values only, up to lastIdx)
-      const w7vals = hoursArr.slice(Math.max(0, lastIdx-6), lastIdx+1).filter(v=>v!=null&&v>0);
-      const weekAvg = w7vals.length ? w7vals.reduce((a,b)=>a+b,0)/w7vals.length : null;
-
-      // MTD avg (all real values)
-      const mtdVals = hoursArr.filter(v=>v!=null&&v>0);
-      const mtdAvg = mtdVals.length ? mtdVals.reduce((a,b)=>a+b,0)/mtdVals.length : null;
-
-      // Trend: latest vs prev
-      const trend = (latestVal!=null&&prevVal!=null)
-        ? (latestVal > prevVal*1.01 ? "↑" : latestVal < prevVal*0.99 ? "↓" : "→")
-        : "—";
-      const trendClr = trend==="↑"?"var(--good)":trend==="↓"?"var(--bad)":"var(--muted)";
-
-      rows.push({name, zoneName:z.name, zid:z.id, tgt,
-        latestVal, latestDate, prevVal, prevDate, weekAvg, mtdAvg, trend, trendClr});
-    });
-  });
-
-  if(!rows.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available.</div></div>`;
-
-  // Sort: worst gap first
-  rows.sort((a,b)=>{
-    const gA = (a.latestVal&&a.tgt) ? a.latestVal-a.tgt : 0;
-    const gB = (b.latestVal&&b.tgt) ? b.latestVal-b.tgt : 0;
-    return gA-gB;
-  });
-
-  const showZone = activeZones.length > 1;
-
-  const tableRows = rows.map(r=>{
-    const latGap  = fmtGap(r.latestVal, r.tgt);
-    const weekGap = fmtGap(r.weekAvg,   r.tgt);
-    const mtdGap  = fmtGap(r.mtdAvg,    r.tgt);
-    const latClr  = latGap.good===true?"var(--good)":latGap.good===false?"var(--bad)":"var(--muted)";
-    const weekClr = weekGap.good===true?"var(--good)":weekGap.good===false?"var(--bad)":"var(--muted)";
-    const mtdClr  = mtdGap.good===true?"var(--good)":mtdGap.good===false?"var(--bad)":"var(--muted)";
-    const latBg   = latGap.good===false?"var(--bad-bg)":latGap.good===true?"var(--good-bg)":"";
-    const weekBg  = weekGap.good===false?"var(--bad-bg)":weekGap.good===true?"var(--good-bg)":"";
-    const mtdBg   = mtdGap.good===false?"var(--bad-bg)":mtdGap.good===true?"var(--good-bg)":"";
-
-    return `<tr>
-      <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeHtml(r.name)}</td>
-      ${showZone?`<td style="padding:9px 8px;font-size:12px;color:var(--muted)">${r.zoneName}</td>`:""}
-      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">
-        <div>${fmtH(r.prevVal)}</div>
-        <div style="font-size:9px;color:var(--muted)">${r.prevDate||""}</div>
-      </td>
-      <td style="padding:9px 8px;text-align:center;background:${latBg}">
-        <div style="font-size:13px;font-weight:700">${fmtH(r.latestVal)}</div>
-        <div style="font-size:10px;color:${latClr};font-weight:800">${latGap.str}</div>
-        <div style="font-size:9px;color:var(--muted)">${r.latestDate}</div>
-      </td>
-      <td style="padding:9px 8px;text-align:center;background:${weekBg}">
-        <div style="font-size:12px;font-weight:700">${fmtH(r.weekAvg!=null?Math.round(r.weekAvg):null)}</div>
-        <div style="font-size:10px;color:${weekClr};font-weight:800">${weekGap.str}</div>
-      </td>
-      <td style="padding:9px 8px;text-align:center;background:${mtdBg}">
-        <div style="font-size:12px;font-weight:700">${fmtH(r.mtdAvg!=null?Math.round(r.mtdAvg):null)}</div>
-        <div style="font-size:10px;color:${mtdClr};font-weight:800">${mtdGap.str}</div>
-      </td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${fmtH(r.tgt)}</td>
-      <td style="padding:9px 8px;text-align:center;font-size:18px;font-weight:800;color:${r.trendClr}">${r.trend}</td>
-    </tr>`;
-  }).join("");
-
-  return `<div class="panel" style="overflow-x:auto">
-    <div style="padding:4px 0 16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
-        <select onchange="tplNameFilter=this.value;renderAnalysis()"
-          style="padding:7px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
-          background:var(--ink2);color:#fff;cursor:pointer;min-width:140px">
-          ${nameOpts}
-        </select>
-      </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
-        <button onclick="tplZoneMulti.clear();renderAnalysis()"
-          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;
-          ${tplZoneMulti.size===0?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All</button>
-        ${ZONES.map(z=>`<button onclick="if(tplZoneMulti.has('${z.id}')){tplZoneMulti.delete('${z.id}');}else{tplZoneMulti.add('${z.id}');}renderAnalysis()"
-          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
-          ${tplZoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
-          ${z.name.replace(" Area","").replace("October ","Oct ")}</button>`).join("")}
-      </div>
-    </div>
-    <table style="min-width:${showZone?"720px":"580px"}">
-      <thead><tr>
-        <th style="padding:9px 12px;text-align:left">3PL</th>
-        ${showZone?`<th style="padding:9px 8px">Zone</th>`:""}
-        <th style="padding:9px 8px;text-align:center">Prev Day</th>
-        <th style="padding:9px 8px;text-align:center">Latest</th>
-        <th style="padding:9px 8px;text-align:center">Last 7 Days</th>
-        <th style="padding:9px 8px;text-align:center">MTD</th>
-        <th style="padding:9px 8px;text-align:center">Target</th>
-        <th style="padding:9px 8px;text-align:center">Trend</th>
-      </tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-    <div style="font-size:11px;color:var(--muted);padding:10px 12px">
-      Latest = last day with data · Sorted by gap vs target (worst first)
-    </div>
-  </div>`;
 }
 
 /* DASHBOARD LOGIN */
@@ -5280,10 +5536,11 @@ function render(){
   const zv=document.getElementById("zoneview");
   const lv=document.getElementById("logview");
   ov.classList.add("hidden"); zv.classList.add("hidden"); lv.classList.add("hidden");
-  ["taskview","briefingview","targetview","exportview","analysisview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
+  ["taskview","briefingview","targetview","exportview","analysisview","followupview"].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("hidden");});
   if(curTab==="overview"){ ov.classList.remove("hidden"); renderOverview(); }
   else if(curTab==="log"){ lv.classList.remove("hidden"); renderLog(); }
   else if(curTab==="tasks"){ document.getElementById("taskview").classList.remove("hidden"); renderTasks(); }
+  else if(curTab==="followup"){ document.getElementById("followupview").classList.remove("hidden"); renderFollowUps(); }
   else if(curTab==="briefing"){ document.getElementById("briefingview").classList.remove("hidden"); renderBriefing(); }
   else if(curTab==="targets"){ document.getElementById("targetview").classList.remove("hidden"); renderTargets(); }
   else if(curTab==="export"){ document.getElementById("exportview").classList.remove("hidden"); renderExport(); }
@@ -5310,6 +5567,7 @@ document.addEventListener("click", function(e){
   try { await loadSharedActions(); } catch(e){}
   try { await loadWHData(); } catch(e){}
   try { await loadTasks(); } catch(e){}
+  try { await loadFollowUps(); } catch(e){}
   try { await loadTargets(); } catch(e){}
   loadActionDone();
 
