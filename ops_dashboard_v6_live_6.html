@@ -2325,28 +2325,149 @@ Be concise and direct. Format with clear numbered sections.`;
    TASKS TAB
    ════════════════════════════════════════════ */
 const TASKS_URL = ACTIONS_SCRIPT_URL; // same Apps Script
+const TASKS_BACKUP_KEY = "tlbTasksBackup_v1";
 let tasksCache = []; // [{id, title, owner, priority, deadline, done, notes, ts}]
 let taskFilter = "all"; // all | high | overdue | mine
 let taskOwnerFilter = "";
 let showAddTask = false;
+let tasksLoadedOK = false;   // becomes true only after a successful read from the sheet
+let tasksSaveFailed = false; // tracks last save outcome, shown in the UI
 
-async function loadTasks(){
+/* ---- local safety-net backup (does NOT replace the sheet — just a recovery copy) ---- */
+function backupTasksLocally(tasks){
+  try{
+    localStorage.setItem(TASKS_BACKUP_KEY, JSON.stringify({
+      tasks, savedAt: Date.now()
+    }));
+  }catch(e){ console.error("backupTasksLocally:",e); }
+}
+function getLocalTasksBackup(){
+  try{
+    const raw = localStorage.getItem(TASKS_BACKUP_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+
+/* ---- tiny non-blocking toast for success/failure feedback ---- */
+function showTaskToast(msg, kind){
+  let el = document.getElementById("taskToast");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "taskToast";
+    el.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);"+
+      "padding:12px 20px;border-radius:12px;font-family:inherit;font-size:13.5px;font-weight:700;"+
+      "z-index:5000;opacity:0;transition:opacity .25s ease,transform .25s ease;box-shadow:0 8px 24px rgba(0,0,0,.18);"+
+      "max-width:90vw;text-align:center";
+    document.body.appendChild(el);
+  }
+  const colors = {
+    ok:   {bg:"#0f7a47", fg:"#fff"},
+    err:  {bg:"#c0392b", fg:"#fff"},
+    info: {bg:"#1a1f2e", fg:"#fff"}
+  };
+  const c = colors[kind] || colors.info;
+  el.style.background = c.bg;
+  el.style.color = c.fg;
+  el.textContent = msg;
+  requestAnimationFrame(()=>{
+    el.style.opacity = "1";
+    el.style.transform = "translateX(-50%) translateY(0)";
+  });
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(()=>{
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) translateY(20px)";
+  }, 3200);
+}
+
+async function loadTasks(retrying){
   try{
     const resp = await fetch(TASKS_URL+"?action=getTasks",{cache:"no-store"});
-    if(!resp.ok) return;
+    if(!resp.ok){
+      console.error("loadTasks: HTTP",resp.status);
+      if(!retrying) return loadTasks(true); // one retry on transient HTTP errors
+      return;
+    }
     const text = await resp.text();
-    if(!text||text==="[]"||text.startsWith("ERROR")) return;
-    tasksCache = JSON.parse(text);
-  }catch(e){ console.error("loadTasks:",e); }
+    if(!text || text.startsWith("ERROR")){
+      console.error("loadTasks: bad response",text);
+      if(!retrying) return loadTasks(true);
+      return;
+    }
+    // "[]" is a legitimate empty list — only accept it once we've confirmed the
+    // endpoint actually responded (not a network failure), so we don't treat a
+    // transient error as "the sheet is empty".
+    const parsed = JSON.parse(text);
+    if(!Array.isArray(parsed)){ console.error("loadTasks: unexpected payload",text); return; }
+
+    // Safety check: if the sheet suddenly came back EMPTY but we have a
+    // non-empty local backup from before, don't silently trust it — warn
+    // instead of treating it as the new truth.
+    const backup = getLocalTasksBackup();
+    if(parsed.length===0 && backup && backup.tasks && backup.tasks.length>0){
+      console.error("loadTasks: sheet returned 0 tasks but a local backup with",backup.tasks.length,"tasks exists.");
+      tasksCache = parsed;       // still reflect what the sheet says (source of truth)
+      tasksLoadedOK = true;
+      showTaskToast("⚠ Sheet shows 0 tasks, but a local backup has "+backup.tasks.length+" — open the Tasks tab for recovery options.", "err");
+      if(curTab==="tasks") renderTasks();
+      return;
+    }
+
+    tasksCache = parsed;
+    tasksLoadedOK = true; // only now are we allowed to overwrite the sheet on save
+    if(parsed.length>0) backupTasksLocally(parsed); // refresh the safety-net copy
+    if(curTab==="tasks") renderTasks(); // refresh UI if user is already on the tab
+  }catch(e){
+    console.error("loadTasks:",e);
+    if(!retrying) return loadTasks(true); // one retry on network failure
+  }
 }
 
 async function saveTasks(){
+  // Guard: never push tasksCache to the sheet until we've successfully loaded
+  // it at least once. Without this, a failed/late loadTasks() leaves
+  // tasksCache=[] and the very next add/done/delete would overwrite the whole
+  // sheet with an empty list — this was the cause of tasks "resetting".
+  if(!tasksLoadedOK){
+    console.error("saveTasks blocked: tasks have not been loaded successfully yet.");
+    tasksSaveFailed = true;
+    alert("⚠ Couldn't confirm the tasks were loaded from the sheet yet, so this change wasn't saved remotely (to avoid wiping data). Please refresh and try again.");
+    return false;
+  }
+  // Back up locally BEFORE attempting the remote save — this is the
+  // recovery copy if the remote write fails halfway or wipes the sheet.
+  backupTasksLocally(tasksCache);
   try{
-    await fetch(TASKS_URL,{
+    const resp = await fetch(TASKS_URL,{
       method:"POST",
       body:JSON.stringify({type:"saveTasks", tasks:tasksCache})
     });
-  }catch(e){}
+    const text = await resp.text().catch(()=> "");
+    // The Apps Script can refuse the write server-side (e.g. it detected an
+    // attempt to overwrite a non-empty sheet with an empty/much-smaller list)
+    // and responds with "ERROR: <reason>" while still returning HTTP 200.
+    if(text && text.indexOf("ERROR:")===0){
+      tasksSaveFailed = true;
+      const reason = text.slice("ERROR:".length).trim();
+      console.error("saveTasks: server refused —",reason);
+      showTaskToast("⛔ Server refused to save: "+reason, "err");
+      return false;
+    }
+    if(!resp.ok){
+      tasksSaveFailed = true;
+      console.error("saveTasks: HTTP",resp.status);
+      showTaskToast("⚠ Save failed (server error) — your change is only kept locally for now.", "err");
+      return false;
+    }
+    tasksSaveFailed = false;
+    return true;
+  }catch(e){
+    tasksSaveFailed = true;
+    console.error("saveTasks:",e);
+    showTaskToast("⚠ Save failed (no connection) — your change is only kept locally for now.", "err");
+    return false;
+  }
 }
 
 function isOverdue(deadline){
@@ -2552,7 +2673,31 @@ function renderTasks(){
       </div>
     </div>` : "";
 
+  const localBackup = getLocalTasksBackup();
+  const backupHasMore = tasksLoadedOK && localBackup && localBackup.tasks &&
+    localBackup.tasks.length > tasksCache.length;
+
+  const recoveryBanner = backupHasMore
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--watch-bg);border:1px solid var(--watch-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--watch);flex-wrap:wrap">
+         <span>🛟</span>
+         <span style="flex:1"><b>The sheet has ${tasksCache.length} task(s), but a local backup from ${new Date(localBackup.savedAt).toLocaleString("en-US")} has ${localBackup.tasks.length}.</b> If tasks went missing, you can restore from this backup.</span>
+         <button onclick="restoreTasksFromBackup()" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;background:var(--watch);color:#fff;border:none;white-space:nowrap">Restore backup</button>
+       </div>`
+    : "";
+
+  const syncBanner = (!tasksLoadedOK)
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--watch-bg);border:1px solid var(--watch-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--watch)">
+         <span>⏳</span><span><b>Loading tasks from the sheet…</b> Changes are disabled until this finishes, to avoid overwriting existing data.</span>
+       </div>`
+    : tasksSaveFailed
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--bad-bg);border:1px solid var(--bad-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--bad)">
+         <span>⚠</span><span><b>Last save failed.</b> Your most recent change may only exist locally — check your connection and try again.</span>
+       </div>`
+    : "";
+
   let html = `
+  ${syncBanner}
+  ${recoveryBanner}
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
     <div>
       <div style="font-size:18px;font-weight:800;margin-bottom:4px">📋 Task List</div>
@@ -2570,7 +2715,28 @@ function renderTasks(){
   tv.innerHTML = html;
 }
 
+async function restoreTasksFromBackup(){
+  const backup = getLocalTasksBackup();
+  if(!backup || !backup.tasks || backup.tasks.length===0){
+    alert("No local backup found.");
+    return;
+  }
+  if(!confirm("This will overwrite the sheet with "+backup.tasks.length+" task(s) from the local backup (saved "+new Date(backup.savedAt).toLocaleString("en-US")+"). Continue?")) return;
+  tasksCache = backup.tasks;
+  const ok = await saveTasks();
+  if(ok){
+    showTaskToast("✅ Restored "+backup.tasks.length+" task(s) from local backup.", "ok");
+  } else {
+    showTaskToast("⚠ Restore failed to save to the sheet — try again.", "err");
+  }
+  renderTasks();
+}
+
 async function addTask(){
+  if(!tasksLoadedOK){
+    alert("⏳ Tasks are still loading from the sheet — please wait a moment and try again.");
+    return;
+  }
   const title = document.getElementById("nt-title")?.value?.trim();
   if(!title){ alert("Task name is required!"); return; }
   const owner = document.getElementById("nt-owner")?.value||"";
@@ -2587,7 +2753,12 @@ async function addTask(){
     ts: Date.now()
   };
   tasksCache.push(task);
-  await saveTasks();
+  const ok = await saveTasks();
+  if(ok){
+    showTaskToast("✅ \""+title+"\" was added and saved to the sheet.", "ok");
+  } else {
+    showTaskToast("⚠ \""+title+"\" was added locally but did NOT save to the sheet. Retry once you're back online.", "err");
+  }
   // Send email if owner selected
   if(owner) sendTaskEmailNotification(task);
   showAddTask = false;
@@ -2598,14 +2769,25 @@ async function toggleTaskDone(id){
   const t = tasksCache.find(t=>t.id===id);
   if(!t) return;
   t.done = !t.done;
-  await saveTasks();
+  const ok = await saveTasks();
+  if(ok){
+    showTaskToast(t.done ? "✅ Marked done and saved." : "↩ Marked pending and saved.", "ok");
+  } else {
+    showTaskToast("⚠ Status changed locally but didn't save to the sheet.", "err");
+  }
   renderTasks();
 }
 
 async function deleteTask(id){
   if(!confirm("Delete this task?")) return;
+  const t = tasksCache.find(t=>t.id===id);
   tasksCache = tasksCache.filter(t=>t.id!==id);
-  await saveTasks();
+  const ok = await saveTasks();
+  if(ok){
+    showTaskToast("🗑 Task deleted and saved.", "ok");
+  } else {
+    showTaskToast("⚠ Deleted locally but didn't save to the sheet — it may reappear on refresh.", "err");
+  }
   renderTasks();
 }
 
