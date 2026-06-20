@@ -1443,7 +1443,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
+const DEFAULT_SYNC_URL = ACTIONS_SCRIPT_URL;
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
