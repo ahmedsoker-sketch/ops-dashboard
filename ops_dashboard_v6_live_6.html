@@ -1275,6 +1275,15 @@ header.top .live-dot.syncing{ animation:livePulse 1s infinite; }
 </div>
 
 <script>
+/* ════════════════════════════════════════════
+   ⭐ SINGLE SOURCE OF TRUTH — Apps Script Web App URL
+   Every part of the dashboard (sync, actions, tasks, targets,
+   followups, task emails) calls through this ONE constant.
+   To point the whole dashboard at a new deployment, change
+   ONLY this line — nowhere else needs editing.
+   ════════════════════════════════════════════ */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzWqibdg_VA1HjhepIZ4XHF5QOiMehfDHzWYQ6AiAZv5mZmxEGQ33ArneOQHyoiUU_p/exec";
+
 /* ---------- polarity (agreed) ---------- */
 /* better:"high" = higher is better | "low" = lower is better */
 const META = [
@@ -1443,7 +1452,7 @@ const TARGETS = {
 /* ---------- sheet URL ---------- */
 const SYNC_URL_KEY = "tlbSyncUrl_v1";
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrR_ANvgzOqdLLAfaziMDb2GH9N4vJuSyWczcsMuFOl02zBJ5IXnxWaxVcXN_JNDPaQWBOtmeu9-nZ/pub?gid=2094621603&single=true&output=csv";
-const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbzWqibdg_VA1HjhepIZ4XHF5QOiMehfDHzWYQ6AiAZv5mZmxEGQ33ArneOQHyoiUU_p/exec";
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
 let AUTO_SYNC_URL = localStorage.getItem(SYNC_URL_KEY) || DEFAULT_SYNC_URL;
 
 /* جرب أكتر من طريقة للوصول للشيت */
@@ -1941,8 +1950,8 @@ function setEdit(zid,k,idx,v){
   saveState(); render();
 }
 const ACTIONS_KEY="tlbOpsActions_v1";
-const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzWqibdg_VA1HjhepIZ4XHF5QOiMehfDHzWYQ6AiAZv5mZmxEGQ33ArneOQHyoiUU_p/exec";
-const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzWqibdg_VA1HjhepIZ4XHF5QOiMehfDHzWYQ6AiAZv5mZmxEGQ33ArneOQHyoiUU_p/exec?action=getWH";
+const ACTIONS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec";
+const WH_SCRIPT_URL="https://script.google.com/macros/s/AKfycbxmJt8bJA2cRhc-BhwpDa0r4Ia-7gDoZ-3-hSqqPrnDYTRqh-izQulPa1kEBnAaeRp1/exec?action=getWH";
 
 /* whCache: {zid: { tplName: {hours:[], target:N} }} */
 let whCache = {};
@@ -2197,14 +2206,143 @@ async function deleteFollowUpEntry(id){
   }
 }
 
-// Separate filter state for the 3PL Performance tab (independent from the Analysis tab's filters)
-let fpZoneMulti = new Set();   // multi-select zones (empty = all)
-let fpNameFilter = "all";      // filter by 3PL name
+// ── Area clusters for the 3PL Performance tab's zone filters ──
+// Clicking a cluster expands it to show/toggle its individual zones.
+const AREA_CLUSTERS = [
+  { id:"moh-cluster", name:"Mohandiseen Cluster", zoneIds:["moh","had","sho"] },
+  { id:"oct-cluster", name:"October Cluster",     zoneIds:["oct","zay","pal","wat","smt"] },
+  { id:"giz-cluster", name:"Giza Cluster",        zoneIds:["giz","hah","ccc"] }
+];
+
+// Format an ISO date (YYYY-MM-DD) or any parseable date string as "Jun 13, 2026"
+function formatNiceDate(input){
+  if(!input) return "—";
+  let d;
+  if(/^\d{4}-\d{2}-\d{2}/.test(input)){
+    const [y,m,day] = input.split("-").map(Number);
+    d = new Date(y, m-1, day);
+  } else {
+    d = new Date(input);
+  }
+  if(isNaN(d.getTime())) return escapeAttr(String(input));
+  const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return months[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();
+}
+
+// Sub-tab state for the 3PL Performance area (separate from the main curTab)
+let fpSubTab = "performance"; // "performance" | "commitments"
+
+// Independent filter state PER sub-tab, so Performance and Commitments never share selection
+let perfZoneMulti = new Set();      // multi-select zones for the Performance sub-tab
+let perfNameFilter = "all";
+let perfExpandedClusters = new Set(); // which clusters are expanded to show their zones
+
+let commitZoneMulti = new Set();    // multi-select zones for the Commitments sub-tab
+let commitExpandedClusters = new Set();
+
+function setFpSubTab(tab){
+  fpSubTab = tab;
+  renderFollowUps();
+}
+
+/* Renders a row of cluster pills. Clicking a cluster toggles selecting ALL its
+   zones at once AND expands/collapses it to reveal individual zone pills below.
+   `zoneMulti` and `expandedClusters` are passed by reference (Set objects) so
+   the Performance and Commitments sub-tabs can each keep independent state. */
+function renderAreaFilterPills(zoneMulti, expandedClusters, toggleFnName){
+  const clusterPill = (cluster) => {
+    const allSelected = cluster.zoneIds.every(id=>zoneMulti.has(id));
+    const someSelected = cluster.zoneIds.some(id=>zoneMulti.has(id));
+    const isExpanded = expandedClusters.has(cluster.id);
+    return `<button onclick="${toggleFnName}('cluster','${cluster.id}')"
+        style="font-family:inherit;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;
+        ${allSelected?'background:var(--accent);color:#fff;border-color:var(--accent)':someSelected?'background:#ffe4d1;color:var(--accent);border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+        ${cluster.name} <span style="font-size:9px;opacity:.8">${isExpanded?'▾':'▸'}</span>
+      </button>`;
+  };
+
+  const zonePill = (z) => `<button onclick="${toggleFnName}('zone','${z.id}')"
+      style="font-family:inherit;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:18px;cursor:pointer;border:1px solid;white-space:nowrap;
+      ${zoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
+      ${z.name}</button>`;
+
+  const allBtn = `<button onclick="${toggleFnName}('all')"
+      style="font-family:inherit;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid;
+      ${zoneMulti.size===0?'background:var(--ink2);color:#fff;border-color:var(--ink2)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All Areas</button>`;
+
+  let html = `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">${allBtn}${AREA_CLUSTERS.map(clusterPill).join("")}</div>`;
+
+  // Expanded zone rows, one per expanded cluster
+  AREA_CLUSTERS.forEach(cluster=>{
+    if(!expandedClusters.has(cluster.id)) return;
+    const zones = ZONES.filter(z=>cluster.zoneIds.includes(z.id));
+    html += `<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-top:6px;padding:8px;background:var(--bg);border-radius:12px">
+      <span style="font-size:10px;color:var(--muted);font-weight:700;align-self:center;margin-right:2px">${cluster.name}:</span>
+      ${zones.map(zonePill).join("")}
+    </div>`;
+  });
+
+  return html;
+}
+
+function togglePerfAreaFilter(kind, id){
+  if(kind==="all"){ perfZoneMulti.clear(); perfExpandedClusters.clear(); }
+  else if(kind==="cluster"){
+    const cluster = AREA_CLUSTERS.find(c=>c.id===id);
+    if(!cluster) return;
+    const allSelected = cluster.zoneIds.every(zid=>perfZoneMulti.has(zid));
+    if(allSelected){
+      cluster.zoneIds.forEach(zid=>perfZoneMulti.delete(zid));
+      perfExpandedClusters.delete(id);
+    } else {
+      cluster.zoneIds.forEach(zid=>perfZoneMulti.add(zid));
+      perfExpandedClusters.add(id);
+    }
+  } else if(kind==="zone"){
+    if(perfZoneMulti.has(id)) perfZoneMulti.delete(id);
+    else perfZoneMulti.add(id);
+  }
+  renderFollowUps();
+}
+
+function toggleCommitAreaFilter(kind, id){
+  if(kind==="all"){ commitZoneMulti.clear(); commitExpandedClusters.clear(); }
+  else if(kind==="cluster"){
+    const cluster = AREA_CLUSTERS.find(c=>c.id===id);
+    if(!cluster) return;
+    const allSelected = cluster.zoneIds.every(zid=>commitZoneMulti.has(zid));
+    if(allSelected){
+      cluster.zoneIds.forEach(zid=>commitZoneMulti.delete(zid));
+      commitExpandedClusters.delete(id);
+    } else {
+      cluster.zoneIds.forEach(zid=>commitZoneMulti.add(zid));
+      commitExpandedClusters.add(id);
+    }
+  } else if(kind==="zone"){
+    if(commitZoneMulti.has(id)) commitZoneMulti.delete(id);
+    else commitZoneMulti.add(id);
+  }
+  renderFollowUps();
+}
 
 function renderFollowUps(){
   const fv = document.getElementById("followupview");
   if(!fv) return;
 
+  const subTabBar = `
+    <div class="vmode" style="margin-bottom:16px;width:fit-content">
+      <button class="${fpSubTab==='performance'?'active':''}" onclick="setFpSubTab('performance')">📊 Performance</button>
+      <button class="${fpSubTab==='commitments'?'active':''}" onclick="setFpSubTab('commitments')">🤝 Commitments</button>
+    </div>`;
+
+  fv.innerHTML = subTabBar + (fpSubTab==="performance" ? renderPerformanceSubTab() : renderCommitmentsSubTab());
+}
+
+function renderPerformanceSubTab(){
+  return build3PLPerformanceTable();
+}
+
+function renderCommitmentsSubTab(){
   const zoneOptions = ZONES.map(z=>`<option value="${z.id}">${z.name}</option>`).join("");
 
   const addForm = showAddFollowUp ? `
@@ -2248,17 +2386,23 @@ function renderFollowUps(){
        </div>`
     : "";
 
+  // Filter commitments by selected zones (Commitments sub-tab's own area filter)
+  const filteredFollowUps = commitZoneMulti.size===0
+    ? followUpsCache
+    : followUpsCache.filter(f=>commitZoneMulti.has(f.zone));
+
   // ── Commitment status rows ──
-  const commitRows = followUpsCache.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+  const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
     const zone = ZONES.find(z=>z.id===f.zone);
     const zoneName = zone ? zone.name : f.zone;
     const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
     const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
 
     let statusBadge;
     if(actual==null){
       statusBadge = deadlinePassed
-        ? `<span class="chip watch">⏳ No data yet for ${escapeAttr(f.deadline)}</span>`
+        ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
         : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
     } else if(actual >= f.hours){
       statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
@@ -2271,26 +2415,28 @@ function renderFollowUps(){
         <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeAttr(zoneName)}</td>
         <td style="padding:9px 8px;font-weight:700;font-size:13px">${escapeAttr(f.threePl)}</td>
         <td style="padding:9px 8px;text-align:center" class="num">${f.hours}h</td>
-        <td style="padding:9px 8px;text-align:center">${escapeAttr(f.deadline)}</td>
+        <td style="padding:9px 8px;text-align:center;font-size:12px;color:var(--muted)">${officeTarget!=null ? officeTarget+"h" : "—"}</td>
+        <td style="padding:9px 8px;text-align:center;white-space:nowrap">${formatNiceDate(f.deadline)}</td>
         <td style="padding:9px 8px;text-align:center" class="num">${actual!=null ? actual+"h" : "—"}</td>
         <td style="padding:9px 8px;text-align:center">${statusBadge}</td>
         <td style="padding:9px 8px;text-align:center"><button onclick="deleteFollowUpEntry('${escapeAttr(f.id)}')" style="font-size:11px;padding:4px 10px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">✕</button></td>
       </tr>`;
   }).join("");
 
-  const totalCommits = followUpsCache.length;
-  const achieved = followUpsCache.filter(f=>{
+  const totalCommits = filteredFollowUps.length;
+  const achieved = filteredFollowUps.filter(f=>{
     const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
     return a!=null && a>=f.hours;
   }).length;
-  const notAchieved = followUpsCache.filter(f=>{
+  const notAchieved = filteredFollowUps.filter(f=>{
     const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
     return a!=null && a<f.hours;
   }).length;
   const pendingCount = totalCommits - achieved - notAchieved;
 
-  const commitmentsBlock = `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:22px 0 14px">
+  return `
+    ${syncBanner}
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div>
         <div style="font-size:15px;font-weight:800;margin-bottom:4px">🤝 Hours Commitments</div>
         <div style="font-size:12.5px;color:var(--muted)">
@@ -2307,24 +2453,24 @@ function renderFollowUps(){
       </button>
     </div>
     ${addForm}
+    <div class="panel" style="padding:14px 14px 4px;margin-bottom:14px">
+      ${renderAreaFilterPills(commitZoneMulti, commitExpandedClusters, "toggleCommitAreaFilter")}
+    </div>
     <div class="panel">
       ${totalCommits===0
         ? `<div class="logempty">No commitments logged yet. Click "Add Commitment" to log an hours promise from a 3PL.</div>`
-        : `<div style="overflow-x:auto"><table style="min-width:680px"><thead><tr>
+        : `<div style="overflow-x:auto"><table style="min-width:760px"><thead><tr>
              <th style="padding:9px 12px;text-align:left">Zone</th><th style="padding:9px 8px">3PL</th><th style="padding:9px 8px">Hours Committed</th>
-             <th style="padding:9px 8px">Deadline</th><th style="padding:9px 8px">Actual Hours</th><th style="padding:9px 8px">Status</th><th></th>
+             <th style="padding:9px 8px">Office Target</th><th style="padding:9px 8px">Deadline</th><th style="padding:9px 8px">Actual Hours</th><th style="padding:9px 8px">Status</th><th></th>
            </tr></thead><tbody>${commitRows}</tbody></table></div>`}
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6">
-      Actual hours are read from the <b>3PL WH</b> sheet for the exact deadline date. If that date hasn't synced yet, the status shows as pending.
+      Actual hours are read from the <b>3PL WH</b> sheet for the exact deadline date. "Office Target" is the 3PL's standing monthly hours target for that zone. If the deadline date hasn't synced yet, the status shows as pending.
     </div>`;
-
-  // ── 3PL performance table (now lives only here, in the 3PL Performance tab) ──
-  fv.innerHTML = `${syncBanner}${build3PLPerformanceTable()}${commitmentsBlock}`;
 }
 
 /* Builds the 3PL performance comparison table (hours vs target, trend, etc),
-   using this tab's own filter state (fpZoneMulti/fpNameFilter). */
+   using the Performance sub-tab's own filter state (perfZoneMulti/perfNameFilter). */
 function build3PLPerformanceTable(){
   const fmtH = v => v!=null && v>0 ? Math.round(v).toLocaleString()+"h" : "—";
   const fmtGap = (v, tgt) => {
@@ -2337,10 +2483,10 @@ function build3PLPerformanceTable(){
     ZONES.flatMap(z=>Object.keys(whCache[z.id]||{}))
   )].sort();
 
-  const activeZones = fpZoneMulti.size===0 ? ZONES : ZONES.filter(z=>fpZoneMulti.has(z.id));
+  const activeZones = perfZoneMulti.size===0 ? ZONES : ZONES.filter(z=>perfZoneMulti.has(z.id));
 
-  const nameOpts = `<option value="all" ${fpNameFilter==="all"?"selected":""}>All 3PLs</option>`
-    + allTplNames.map(n=>`<option value="${escapeHtml(n)}" ${fpNameFilter===n?"selected":""}>${escapeHtml(n)}</option>`).join("");
+  const nameOpts = `<option value="all" ${perfNameFilter==="all"?"selected":""}>All 3PLs</option>`
+    + allTplNames.map(n=>`<option value="${escapeHtml(n)}" ${perfNameFilter===n?"selected":""}>${escapeHtml(n)}</option>`).join("");
 
   const rows = [];
   activeZones.forEach(z=>{
@@ -2349,7 +2495,7 @@ function build3PLPerformanceTable(){
     const n = whDates.length;
 
     Object.entries(zd).forEach(([name, hoursArr])=>{
-      if(fpNameFilter!=="all" && name!==fpNameFilter) return;
+      if(perfNameFilter!=="all" && name!==perfNameFilter) return;
       const tgt = (whTargets[z.id]&&whTargets[z.id][name]!=null) ? whTargets[z.id][name] : null;
 
       let lastIdx = -1;
@@ -2378,7 +2524,18 @@ function build3PLPerformanceTable(){
     });
   });
 
-  if(!rows.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available.</div></div>`;
+  const filterBar = `<div class="panel" style="padding:14px 14px 4px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:10px">
+      <select onchange="perfNameFilter=this.value;renderFollowUps()"
+        style="padding:7px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
+        background:var(--ink2);color:#fff;cursor:pointer;min-width:140px">
+        ${nameOpts}
+      </select>
+    </div>
+    ${renderAreaFilterPills(perfZoneMulti, perfExpandedClusters, "togglePerfAreaFilter")}
+  </div>`;
+
+  if(!rows.length) return `${filterBar}<div class="panel"><div style="padding:20px;color:var(--muted)">No 3PL data available for this selection.</div></div>`;
 
   rows.sort((a,b)=>{
     const gA = (a.latestVal&&a.tgt) ? a.latestVal-a.tgt : 0;
@@ -2424,26 +2581,8 @@ function build3PLPerformanceTable(){
     </tr>`;
   }).join("");
 
-  return `<div class="panel" style="overflow-x:auto">
-    <div style="padding:4px 0 16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-        <div style="font-size:15px;font-weight:800">🚚 3PL Performance</div>
-        <select onchange="fpNameFilter=this.value;renderFollowUps()"
-          style="padding:7px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
-          background:var(--ink2);color:#fff;cursor:pointer;min-width:140px">
-          ${nameOpts}
-        </select>
-      </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
-        <button onclick="fpZoneMulti.clear();renderFollowUps()"
-          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;
-          ${fpZoneMulti.size===0?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">All</button>
-        ${ZONES.map(z=>`<button onclick="if(fpZoneMulti.has('${z.id}')){fpZoneMulti.delete('${z.id}');}else{fpZoneMulti.add('${z.id}');}renderFollowUps()"
-          style="font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid;white-space:nowrap;
-          ${fpZoneMulti.has(z.id)?'background:var(--accent);color:#fff;border-color:var(--accent)':'background:var(--flat-bg);color:var(--flat);border-color:var(--line)'}">
-          ${z.name.replace(" Area","").replace("October ","Oct ")}</button>`).join("")}
-      </div>
-    </div>
+  return `${filterBar}<div class="panel" style="overflow-x:auto">
+    <div style="padding:14px 12px 0;font-size:15px;font-weight:800">🚚 3PL Performance</div>
     <table style="min-width:${showZone?"720px":"580px"}">
       <thead><tr>
         <th style="padding:9px 12px;text-align:left">3PL</th>
@@ -4673,7 +4812,7 @@ const TEAM_MEMBERS = [
   {name:"Ahmed Nour",     email:"ahmed.noureldeen@talabat.com"},
   {name:"Mohamed Beshary",email:"mohamed.hassan@talabat.com"},
 ];
-const SCRIPT_URL = ACTIONS_SCRIPT_URL;
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3x-aqxA4coodkhZnzbAgT1sKqVMlOUUlf-aRlira0Qs4wlZyidxzW4MRyXVZQ9nR3/exec";
 
 async function sendTaskEmailNotification(task){
   try{
