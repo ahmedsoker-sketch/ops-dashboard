@@ -2402,30 +2402,46 @@ const commitRows = filteredFollowUps
     const zone = ZONES.find(z => z.id === f.zone);
     const zoneName = zone ? zone.name : f.zone;
 
-    // 1️⃣ تحويل التاريخ بصيغة الـ ISO
-    const d = new Date(f.deadline);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const cleanIsoDate = `${yyyy}-${mm}-${dd}`;
+    // 1️⃣ تحويل تاريخ الديدلاين لنص صريح (مثلاً: "2026-06-21")
+    const dlDateObj = new Date(f.deadline);
+    const yyyy = dlDateObj.getFullYear();
+    const mm = String(dlDateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dlDateObj.getDate()).padStart(2, '0');
+    const deadlineStr = `${yyyy}-${mm}-${dd}`;
 
-    // قراءة الساعات الفكرية
-    const actual = getActualHoursFor3PL(f.zone, f.threePl, cleanIsoDate);
+    // 2️⃣ قراءة الساعات الفكرية بنفس النص النظيف
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, deadlineStr);
 
     const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
-    
-    // 2️⃣ تعديل الإشارة لـ (<) علشان يوم النهاردة ما يعتبرش عدا لسه
-    const deadlinePassed = new Date(f.deadline) < new Date(todayISO());
+
+    // 3️⃣ تحويل تاريخ "النهاردة" لنفس النص الصريح (لتجنب مشاكل الوقت والـ Timezone)
+    const todayObj = new Date(todayISO());
+    const tYYYY = todayObj.getFullYear();
+    const tMM = String(todayObj.getMonth() + 1).padStart(2, '0');
+    const tDD = String(todayObj.getDate()).padStart(2, '0');
+    const todayStr = `${tYYYY}-${tMM}-${tDD}`;
+
+    // 4️⃣ تحديد علاقة الديدلاين بالنهاردة كنصوص (مقارنة Strings مضمونة)
+    const deadlinePastToday = (deadlineStr < todayStr); // هل الديدلاين قبل النهاردة تماماً؟ (يوم 20 أصغر من 21)
 
     let statusBadge;
-    // 3️⃣ تعديل الشرط: لو الداتا null "أو" لو الداتا بـ 0 والديدلاين لسه ما عداش (زي حالة النهاردة)
-    if (actual == null || (actual === 0 && !deadlinePassed)) {
-      statusBadge = deadlinePassed
+    // 5️⃣ منطق تحديد الحالة القوي
+    // الأول: لو حقق الساعات (عطيه أخضر فوراً، حتى لو النهاردة)
+    if (actual != null && actual >= f.hours) {
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+    } 
+    // الثاني: لو الداتا بـ 0 والدديدلاين لسه ما عداش (زي حالة النهاردة)
+    else if (actual === 0 && !deadlinePastToday) {
+      statusBadge = `<span class="chip watch">🕓 Pending — deadline not reached (or in progress)</span>`;
+    }
+    // الثالث: لو الداتا null (يعني الشيت فاضي تماماً والديدلاين مفيش كلام لسه)
+    else if (actual == null) {
+      statusBadge = deadlinePastToday
         ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
         : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
-    } else if (actual >= f.hours) {
-      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
-    } else {
+    } 
+    // الرابع: لو لم يحقق والوقت عِدا خلاص
+    else {
       statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
     }
     // بقية الـ return بتاع الماب...
