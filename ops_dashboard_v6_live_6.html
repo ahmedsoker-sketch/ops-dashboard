@@ -2394,7 +2394,468 @@ function renderCommitmentsSubTab(){
     : followUpsCache.filter(f=>commitZoneMulti.has(f.zone));
 
   // ── Commitment status rows ──
-  const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+ 
+Conversation with Gemini
+المفروض الكود ده لما التاريخ يجي بتاع الديدلاين يسحب رقم المكتب في اليوم ده وياقؤن ويشوف حقق ولا لا ايه المشكلة ؟
+
+بناءً على الصورة image_3385a0.png والبيانات اللي قدامنا، المشكلة واضحة جداً في التواريخ اللي عدت فعلياً.
+
+النهاردة تاريخ اليوم هو 21 يونيو 2026. لو ركزت في الجدول، هتلاقي الديدلاين لثلاثة صفوف هو Jun 20, 2026 (يعني امبارح)، ومع ذلك الحالة لسه واقفة على:
+⏳ No data yet for Jun 20, 2026
+
+بما إن اليوم ده عدا خلاص، المفروض الكود يكون سحب البيانات وحدد الحالة (حقق أو لم يحقق). وقفلتها على Pending بالشكل ده معناه إن فيه "خلل منطقي" (Logic Bug) في الكود.
+
+الأسباب المحتملة للمشكلة في الكود:
+1. شرط المقارنة (Strict Equality Bug):
+احتمال كبير الكود بيشيك على التاريخ بشرط التساوي التام، يعني حاجة شبه كده:
+if (current_date == deadline_date)
+لو الشرط كده، فالكود هيشتغل فقط في نفس يوم الديدلاين. لو اليوم ده عدا وبقينا في اليوم اللي بعده (زي النهاردة 21)، الشرط مش هينطبق على يوم 20، وبالتالي الكود هيتجاهله ويفضل واقف على Pending للأبد.
+
+الحل: تأكد إن الشرط يسمح بقراءة التواريخ الحالية والسابقة، مثل: if (current_date >= deadline_date).
+
+2. مشكلة في شيت المصدر (3PL WH):
+الملاحظة المكتوبة تحت الجدول بتقول إن الساعات الفعليه بتتقري من شيت اسمه 3PL WH للتاريخ المحدد بالظبط. لو الكود بتاعك شغال صح بس الشيت ده لسه ماتحدثش أو مفيش فيه بيانات ليوم 20 يونيو، الكود مش هيلاقي داتا وهيفضل مطلع الرسالة دي.
+
+3. صيغة التاريخ والوقت (Date Formatting & Timezones):
+ممكن الكود بيقارن التاريخ بالوقت بالظبط (Timestamp) مش كـ (Date) مجرد. فلو الساعة مثلاً 1:00 الظهر والديدلاين متسجل على إنه نهاية اليوم، المقارنة ممكن تفشل. أو بسبب اختلاف الـ Timezone بين السيرفر والشيت.
+
+4. توقيت وطريقة تشغيل الـ Sync:
+الـ Last sync ظاهر إنه الساعة 1:00 ظهرًا، فلو الـ Script اللي بيسحب الداتا بيعتمد على "مزامنة تلقائية" (Cron Job) بتشتغل في وقت معين والوقت ده فات أو حصل فيه Error، الداتا مش هتنزل.
+
+علشان نقدر نحدد المشكلة بالظبط ونعدلها، ممكن تشارك معايا جزء الكود (Code snippet) المسؤول عن مقارنة التواريخ وسحب البيانات من الشيت؟
+
+ const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+
+    const zone = ZONES.find(z=>z.id===f.zone);
+
+    const zoneName = zone ? zone.name : f.zone;
+
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
+
+    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+
+
+    let statusBadge;
+
+    if(actual==null){
+
+      statusBadge = deadlinePassed
+
+        ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
+
+        : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+
+    } else if(actual >= f.hours){
+
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+
+    } else {
+
+      statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+
+    }
+
+المفروض ده الكود
+
+الكود اللي أنت بعته وضح المشكلة تماماً! الكود شغال منطقياً بناءً على اللي مكتوب فيه، لكن فيه سببين هما اللي مخلين النتيجة تظهر "No data yet" للتواريخ القديمة:
+
+1. السبب الأول والأساسي: الدالة getActualHoursFor3PL بترجع null
+في السطر ده:
+
+JavaScript
+const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+الدالة دي لما بتروح تدور في شيت 3PL WH مش بتلاقي ساعات متسجلة لليوم ده (يوم 20 يونيو)، فبترجع قيمتها بـ null.
+
+بما إنها رجعت null، الكود بيدخل علطول في أول شرط عندك:
+
+JavaScript
+if(actual == null){
+  statusBadge = deadlinePassed
+    ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
+    : `...`;
+}
+وبما إن deadlinePassed قيمته true (لأن يوم 20 أصغر من أو يساوي يوم 21)، فالكود بينفذ السطر ده بالظبط ويطبع الرسالة اللي ظاهرة في الصورة.
+
+2. السبب الثاني: عدم مطابقة صيغة التاريخ (Date Formatting)
+غالباً الدالة getActualHoursFor3PL مش عارفة تقرأ التاريخ صح من الشيت.
+
+قيمة f.deadline ممكن تكون مبعوتة بصيغة نصية مثل ("2026-06-20").
+
+بينما التاريخ جوه شيت الجوجل (Google Sheet) ممكن يكون متسجل بصيغة تانية زي (20/06/2026) أو متسجل كـ Date Object.
+
+لما الدالة بتعمل بحث (Lookup) بالصيغة المختلفة دي مش بتلاقي تطابق، فبترجع null.
+
+الحلول المقترحة لعلاج المشكلة:
+الحل الأول: تعديل منطق الكود (لو مفيش داتا والديدلاين عدا يعتبرها 0 ساعة)
+لو المفروض لما الديدلاين يعدي وما نلاقيش داتا في الشيت، السيستم يعتبر إن الـ 3PL محققش حاجة (يعني الساعات الفكرية = 0) ويظهر Not Achieved بدل No data yet، تعديل الكود هيكون كالتالي:
+
+قم بتغيير طريقة تعريف actual بحيث لو رجع null والديدلاين عدا، يفترض إنه 0:
+
+JavaScript
+const actualRaw = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+// لو الديدلاين عدا والداتا لسه null، اعتبر الساعات الفعالة 0 علشان يدخل في الحسبة
+const actual = (actualRaw == null && deadlinePassed) ? 0 : actualRaw;
+
+let statusBadge;
+if(actual == null){
+  // الشرط ده مش هيدخله غير لو actualRaw بـ null ولسه الديدلاين ما عداش
+  statusBadge = `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+} else if(actual >= f.hours){
+  statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+} else {
+  // هنا لو الساعات 0 أو أقل من المطلوب والديدلاين عدا، هيجيب الأحمر علطول
+  statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+}
+الحل الثاني: مراجعة دالة getActualHoursFor3PL
+لو أنت متأكد إن الشيت فيه بيانات فعلاً ليوم 20 يونيو، يبقى المشكلة جوه الدالة نفسها. لازم تفتح الكود بتاع دالة getActualHoursFor3PL وتتأكد من الآتي:
+
+اطبغ (console.log) لقيمة f.deadline وقيمة التاريخ اللي جاي من الشيت علشان تشوف هل هما متطابقين تماماً بنفس الصيغة والـ Timezone ولا لا.
+
+تأكد إن عملية الـ Sync (المزامنة) اللي بتجيب البيانات من الـ API أو الشيت الرئيسي شغال ومفيش فيه تهنيج ومحدث بيانات يوم 20.
+
+فيه داتا في الشيت ليوم 20 عادي ممكن التاريخ مش شبه بعض اشوفها ازاي بس حل سريع
+
+علشان تشوف المشكلة وتعرف التواريخ شكلها إيه بالظبط (هل هي نص String ولا Object وتنسيقها إيه)، عندك طريقتين؛ واحدة سريعة للـ Debugging (عشان تشوفها بنفسك)، والتانية هي الحل البرمجي السريع.
+
+أولاً: أسرع طريقة تشوف بيها الاختلاف (في الـ Console)
+قبل السطر بتاع const actual = ... في الكود بتاعك، ضيف السطرين دول عشان يطبعوا لك في الـ Console شكل التاريخ ونوعه بالظبط:
+
+JavaScript
+console.log("---- Debugging Date ----");
+console.log("f.deadline value:", f.deadline, " | Type:", typeof f.deadline);
+// لو تقدر تطبع عينة من تاريخ الشيت جوه الدالة getActualHoursFor3PL يكون ممتاز
+لو لقيت مثلاً f.deadline طالع كده: 2026-06-20T00:00:00.000Z والشيت مكتوب فيه 20/06/2026 أو 6/20/2026، يبقى هو ده سبب الـ null.
+
+ثانياً: الحل السريع والمضمون كودياً (Quick Fix)
+أضمن وأسرع طريقة لحل مشاكل التواريخ هي تحويل أي تاريخ (سواء من الكود أو الشيت) لـ صيغة نصية موحدة وسادة (زي YYYY-MM-DD) مفيهاش وقت ولا مناطق زمنية (Timezones).
+
+جوه الدالة getActualHoursFor3PL (المسؤولة عن البحث في الشيت)، حوّل التاريخين للصيغة دي قبل ما تعمل المقارنة (if):
+
+JavaScript
+// 1. تحويل تاريخ الديدلاين اللي جاي من الكود لصيغة YYYY-MM-DD
+const cleanDeadline = new Date(deadlineFromCode).toISOString().split('T')[0];
+
+// 2. تحويل التاريخ اللي مقروء من الشيت لنفس الصيغة YYYY-MM-DD
+const cleanSheetDate = new Date(dateFromSheet).toISOString().split('T')[0];
+
+// 3. المقارنة دلوقتي هتنجح لأنهم بقوا نصوص متطابقة تماماً
+if (cleanDeadline === cleanSheetDate) {
+   // اجمَع الساعات هنا...
+}
+طريقة بديلة سريعة (مقارنة الأرقام - Timestamp):
+ممكن كمان تصفّر الوقت في التاريخين وتقارنهم كأرقام (وهي طريقة سريعة جداً):
+
+JavaScript
+const d1 = new Date(deadlineFromCode).setHours(0,0,0,0);
+const d2 = new Date(dateFromSheet).setHours(0,0,0,0);
+
+if (d1 === d2) { ... }
+جرب تطبع التاريخين الأول بالـ console.log عشان تقطع الشك باليقين، ولو واجهتك مشكلة جوه دالة الشيت (getActualHoursFor3PL) ابعتها لي ونعدلها فوراً.
+
+console.log ازاي
+
+بص يا سيدي، على حسب الكود ده شغال فين بالظبط (في المتصفح قدامك ولا في الخلفية Backend)، هبسطهالك في خطوتين:
+
+الخطوة 1: هتحط الكود فين بالظبط؟
+افتح الملف اللي فيه الكود اللي بعتهولي، وضِيف السطور دي جوه الـ map وقبل السطر بتاع actual بالشكل ده:
+
+JavaScript
+const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+    const zone = ZONES.find(z=>z.id===f.zone);
+    const zoneName = zone ? zone.name : f.zone;
+
+    // 👇 حط السطور دي هنا بالظبط 👇
+    console.log("=== فحص تاريخ الديدلاين ===");
+    console.log("Zone:", zoneName, " | 3PL:", f.threePl);
+    console.log("Deadline value:", f.deadline);
+    console.log("Deadline Type:", typeof f.deadline);
+    console.log("===========================");
+
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+    // ... باقي الكود بتاعك زي ما هو
+الخطوة 2: هتشوف النتيجة فين؟ (مكان الـ Console)
+شوف الكود بتاعك بيشتغل فين وافتح الشاشة بتاعته:
+
+1. لو الشغل كله في المتصفح (Frontend / React / JS):
+افتح صفحة الموقع اللي فيها الجدول دي على متصفح كروم (Chrome).
+
+اضغط على زرار F12 في الكيبورد (أو اضغط كليك يمين في أي مكان في الصفحة واختار Inspect أو فحص).
+
+من القائمة اللي هتفتح لك يمين أو تحت، اختار تبويب اسمه Console.
+
+اعمل ريفريش (Refresh) للصفحة، هتلاقي البيانات اتطبعت بالمنظر ده وتعرف منها التاريخ مبعوت نص ولا تاريخ كامل.
+
+2. لو الكود ده مكتوب جوه سكريبت الجوجل شيت (Google Apps Script):
+ادخل على الشيت بتاعك ومن فوق اختار Extensions ثم Apps Script.
+
+من القائمة الشمال اضغط على علامة الساعة Executions (التنفيذات).
+
+اضغط على آخر عملية تشغيل حصلت، وهتلاقي كل الـ console.log مكتوبة هناك بالتفصيل.
+(ملحوظة: لو أنت جوه Apps Script، الأفضل تستخدم Logger.log بدل console.log لو التانية مش بتظهر معاك).
+
+الله ينور عليك! الـ console.log ده جاب الخلاصة ووضح المشكلة بنسبة 100%.
+
+بص على السطرين دول في الصورة عندك:
+
+قيمة الديدلاين عندك: Sat Jun 20 2026 00:00:00 GMT+0300 ... (نص طويل جداً فيه اليوم والساعة والمنطقة الزمنية).
+
+شكل التاريخ في الشيت (تحت خالص في الصورة): مكتوب header: 6/14 (يعني الشيت بيفهم التاريخ على شكل شهر/يوم فقط بدون سنة أو وقت، ويوم 20 يونيو المفروض يكون شكله 6/20).
+
+طبعاً لما الدالة getActualHoursFor3PL بتاخد النص الطويل العريض ده وتروح تدور بيه في الشيت عن عمود اسمه 6/20 مش بتلاقي أي تطابق، فبترجع null.
+
+الحل السريع (Quick Fix):
+هنحول التاريخ الطويل ده لصيغة M/D (شهر/يوم) قبل ما نبعته للدالة علشان يطابق الشيت بالظبط.
+
+في الكود بتاعك، عدل السطر بتاع actual والسطر اللي فوقه بالشكل ده:
+
+JavaScript
+// 1. تحويل النص الطويل إلى Object تاريخ حقيقي
+const dateObj = new Date(f.deadline);
+
+// 2. تحويله لصيغة "شهر/يوم" زي الشيت بالظبط (مثال: 6/20)
+const formattedDeadlineForSheet = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+
+// 3. ابعت التاريخ المتظبط للدالة
+const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+الكود كامل بعد التعديل علشان تاخده كوبي:
+JavaScript
+const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
+    const zone = ZONES.find(z=>z.id===f.zone);
+    const zoneName = zone ? zone.name : f.zone;
+
+    // --- التعديل هنا ---
+    const dateObj = new Date(f.deadline);
+    const formattedDeadlineForSheet = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+    
+    // بنمرر التاريخ المتformatting للشيت
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+    // -------------------
+
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
+    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+    let statusBadge;
+    if(actual==null){
+      statusBadge = deadlinePassed
+        ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
+        : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+    } else if(actual >= f.hours){
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+    } else {
+      statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+    }
+    
+    // بقية الـ return بتاع الماب...
+جرب التعديل ده واعمل ريفريش، وهتلاقي الداتا قريت من الشيت فوراً والحالة اتقلب لـ Achieved أو Not Achieved!
+
+لسة
+
+تمام، مادام لسه مسمّعتش يبقى التعديل اللي عملناه لـ "6/20" لخبط الدالة من جوه، أو الدالة نفسها بتعمل عملية معالجة (Parsing) تانية للتاريخ ومستنية يتبعت لها بشكل معين.
+
+علشان نقطع الشك باليقين ونحلها فوراً، لازم نشوف الدالة getActualHoursFor3PL دي مكتوبة إزاي من جوه. غالباً هتلاقيها في نفس الملف أو ملف مرتبط، ومكتوبة بالشكل ده:
+
+JavaScript
+function getActualHoursFor3PL(zone, threePl, deadline) {
+   // ... الكود اللي جوه هنا هو اللي فيه السر ...
+}
+الحل دلوقتي:
+ياريت تعمل سرش في الكود عندك على function getActualHoursFor3PL وتبعتلي الكود بتاعها بالكامل.
+
+رجّع السطر بتاع الـ actual زي ما كان في الأول بالظبط (امسح التعديل الأخير مؤقتاً) عشان نعدل صح من جوه الدالة نفسها:
+
+JavaScript
+const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+ورينا الكود بتاع الدالة دي وبإذن الله هنحلها في ثواني!
+
+دي برده ظاهرة لو هتفيد
+
+اللقطة دي فادت جداً وجابت لنا دليل جديد وقوي خطف عيني علطول! 🕵️‍♂️
+
+بص كده على السطر ده في الكونسول:
+WH loaded - dates: ▶ Array(5)
+
+كلمة Array(5) معناها إن السيستم مش قاري من الشيت غير 5 تواريخ بس!
+
+تعال نحسبها بالمنطق:
+السطر اللي تحته بيقول إن البداية من يوم 14 يونيو (header: 6/14). لو الكود بيسحب 5 أيام بس من التاريخ ده، هيبقوا:
+(14، 15، 16، 17، 18 يونيو).
+هذا يعني إن يوم 20 يونيو ويوم 21 يونيو (الديدلاينز اللي عندك فيهم مشكلة) مش موجودين أصلاً جوه الداتا اللي الكود سحبها من الشيت! وطبيعي لما يدور عليهم يرجع null.
+
+علشان نتأكد ونحلها فوراً، اعمل الآتي:
+اكبس على السهم الصغير اللي جنب كلمة ▶ Array(5) في الكونسول علشان يفتح لك الـ 5 تواريخ المكتوبين جوه، وشوف هل يوم 20 و 21 يونيو موجودين معاهم ولا لأ؟ (غالباً مش هتلاقيهم).
+
+روح للسطر رقم 2027 في ملف ops_dashboard_v6_live_6.html (الكونسول كاتب لك رقم السطر على اليمين بالظبط).
+
+السطر ده هو اللي جواه دالة سحب التواريخ من الشيت.
+
+شوف هو ليه عامل ليميت على 5 أيام بس؟ هل الشيت الرئيسي نفسه مش متحدث فيه العواميد الجديدة بتاعة يوم 20 و 21؟ أم إن الكود فيه حلقة تكرار (for loop) بتلف 5 مرات بس واقفة عند حد معين؟
+
+الملخص: المشكلة بنسبة كبيرة مش في صيغة التاريخ، المشكلة إن الداتا بتاعة يوم 20 و 21 يونيو ما اتسحبتش أصلاً من الجوجل شيت للـ Dashboard.
+
+بص على السطر 2027 أو افتح الـ Array(5) وقولي إيه التواريخ اللي ظهرت جواه!
+
+يا جماعة الصبر حلو، والـ Console ده طلع ابن حلال ومبخلش علينا بحاجة! الحقيقة ظهرت كاملة دلوقتي. 🔍
+
+بص كده على الأري بعد ما فتحتها:
+التواريخ اللي السيستم ساحبها هي: "6/1"، "6/2"، "6/3"، "6/4"، "6/5" (أول خمس أيام في شهر يونيو بس!).
+
+بينما الديدلاينز اللي عندك في الجدول هي يوم 20 و 21 يونيو. فطبيعي جداً لما الكود يروح يدور على يوم 20 يونيو جوه لستة مفيهاش غير أول 5 أيام في الشهر، مش هيلاقيه وهيطلع لك null والرسالة الشهيرة "No data yet".
+
+سبب المشكلة في الكود (موجود في السطر 2027):
+لو رحت للسطر 2027 في ملف ops_dashboard_v6_live_6.html، هتلاقي الحتة اللي بتسحب التواريخ من الشيت بتعمل حاجة من اتنين:
+
+إما معمولة ليميت بالكود (Hardcoded Limit):
+مكتوب حاجة شبه .slice(0, 5) أو الـ for loop بيلف 5 مرات بس، فبيقطع بقية أيام الشهر.
+
+أو النطاق (Range) اللي بيتسحب من جوجل شيت صغير:
+يعني الكود بيكلم الـ API وبيروح يقرأ مثلاً من عمود A لحد عمود E بس (أول 5 عواميد)، ومش رايح يقرأ باقي العواميد لحد آخر الشهر.
+
+الحل فوراً:
+افتح الملف ده (ops_dashboard_v6_live_6.html) وشوف السطور من 2025 لحد 2035، هتلاقي الدالة اللي بتعمل console.log("WH loaded - dates:", ...)
+
+الحل جوه الدالة دي هيكون إما:
+
+تكبّر الـ Range المتحدد لجوجل شيت علشان يسحب عواميد الشهر كله (مثلاً بدل A1:F1 تخليه A1:AE1).
+
+أو تشيل الـ .slice(0, 5) لو كانت موجودة وتخليها تاخد الـ array بالكامل.
+
+لو فتحت السطر 2027 ولقيت الكود، ابعتهولي هنا فوراً وهشاورلك على الكلمة اللي محتاجة تتغير علشان تفتح الشهر كله!
+
+  whCache = zoneData;
+
+    whTargets = targetData;
+
+    console.log("WH loaded - dates:", whDates.slice(0,5), "...total:", whDates.length);
+
+    console.log("WH zones:", Object.keys(whCache));
+
+    // Test: find Jun 14 col
+
+    const testIdx = findWHDateCol("Jun 14");
+
+    console.log("Jun 14 col index:", testIdx, "header:", whDates[testIdx]);
+
+  }catch(e){ console.error("loadWHData error:",e); }
+
+}
+
+كده وضحت تماماً وبانت الخدعة! السطر ده كشف ملعوب الـ console.log القديم. 😉
+
+بص على الجزء ده: whDates.slice(0,5), "...total:", whDates.length
+الـ slice(0,5) كانت مجرد علشان يطبع أول 5 أيام بس في الكونسول عشان الزحمة، لكن إجمالي الأيام المتسجلة فعلياً هو total: 30 (يعني الـ 30 يوم بتوع شهر يونيو موجودين كلهم وجاهزين في الخلفية).
+
+السر الحقيقي في طريقة البحث (Format):
+بص على التيست اللي مكتوب في الكود عندك تحت:
+
+JavaScript
+const testIdx = findWHDateCol("Jun 14");
+console.log("Jun 14 col index:", testIdx, "header:", whDates[testIdx]);
+الكود بيستخدم دالة اسمها findWHDateCol وبعت لها التاريخ بصيغة: "Jun 14" (اسم الشهر اختصار 3 حروف + مسافة + رقم اليوم). وهي دي الصيغة السحرية اللي الدالة بتفهمها علشان تطلع العمود صح!
+
+بما إن f.deadline مبعوت نص طويل عريض (Sat Jun 20 2026...)، فالدالة بتضيع ومش بتلاقيه.
+
+الحل النهائي والأكيد (تعديل صيغة التاريخ لـ "Jun 20"):
+هنغير السطر اللي بيحسب الـ actual في الكود الأولاني خالص، ونخليه يحول التاريخ للصيغة دي (Jun 20) قبل ما يبعته للدالة.
+
+روح للكود الأولاني خالص (بتاع الـ commitRows) وعدل الجزء الخاص بالـ actual ليكون بالشكل ده:
+
+JavaScript
+const zone = ZONES.find(z=>z.id===f.zone);
+const zoneName = zone ? zone.name : f.zone;
+
+// 👇 التعديل السحري هنا 👇
+const d = new Date(f.deadline);
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formattedDeadlineForSheet = `${months[d.getMonth()]} ${d.getDate()}`; // هتطلع: "Jun 20"
+
+// بنمرر الصيغة الجديدة للدالة
+const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+// 👆 👆 👆 👆 👆 👆 👆
+
+const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
+جرب التعديل ده واعمل حفظ وريفريش، وبإذن الله الجدول هيقفل اللون البيج والـ Pending، وهيقلب معاك ألوان الشغل الحقيقي (أخضر وأحمر) علطول!
+
+ابعتلي الكود كامل باخر تعديلات
+
+يا سيدي، اتفضل الكود كامل وجاهز بعد ما دمجنا فيه التعديل السحري بتاع صيغة التاريخ ("Jun 20") علشان يقدر يقرأ من الشيت صح وبسرعة.
+
+يمكنك نسخ الكود واستبدال الجزء القديم به مباشرة:
+
+JavaScript
+const commitRows = filteredFollowUps
+  .slice()
+  .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+  .map(f => {
+    const zone = ZONES.find(z => z.id === f.zone);
+    const zoneName = zone ? zone.name : f.zone;
+
+    // 🌟 التعديل الجديد لتظبيط صيغة التاريخ لتطابق الشيت (مثال: "Jun 20") 🌟
+    const d = new Date(f.deadline);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formattedDeadlineForSheet = `${months[d.getMonth()]} ${d.getDate()}`;
+
+    // هنا بنمرر التاريخ بالصيغة الجديدة المتظبطة للدالة
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+    // -------------------------------------------------------------
+
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
+    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+    let statusBadge;
+    if (actual == null) {
+      statusBadge = deadlinePassed
+        ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
+        : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+    } else if (actual >= f.hours) {
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+    } else {
+      statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+    }
+
+    // هنا كود الـ return بتاع الـ map (بقية الخصائص اللي بتعرضها في الجدول)
+    return {
+      ...f,
+      zoneName,
+      actual,
+      officeTarget,
+      statusBadge
+    };
+  });
+💡 ملحوظة أخيرة للتأكيد:
+تأكد فقط من أن نهاية الدالة تعمل return للأوبجكت (كما هو موضح في آخر الكود) بالشكل المتوافق مع بقية ملف الـ Dashboard عندك. جرب واعمل Refresh للصفحة، وإن شاء الله الجدول هينور بالألوان والأرقام المظبوطة!
+
+كده الصورة وضحت تماماً وبقى معانا كل خيوط المشكلة!
+
+من الكونسول الجديد: إجمالي الأيام هو total: 30، يعني الـ 30 يوم بتوع شهر يونيو موجودين كاملين جوه الكود ومش ناقصين. والتواريخ متخزنة جوه الأري بصيغة "6/20"، ودالة التست findWHDateCol("Jun 14") حوّلت النص لـ "6/14" بنجاح وجابت مكان العمود (index: 13).
+
+طالما الداتا موجودة والتاريخ اتقرأ، يبقى فيه سببين تانين خالص هما اللي مخلين الدالة getActualHoursFor3PL ترجع null:
+
+1. السبب الأول والأقوى: مشكلة الـ Zone ID مقابل الـ Zone Name
+لو ركزت في الكود الأساسي:
+
+JavaScript
+const zone = ZONES.find(z => z.id === f.zone);
+const zoneName = zone ? zone.name : f.zone;
+const actual = getActualHoursFor3PL(f.zone, f.threePl, ...);
+f.zone عبارة عن ID (رقم أو رمز مخصص لقاعدة البيانات زي 1 أو "zone_shobra").
+
+zoneName هو الاسم الحقيقي للمكتب اللي بيظهر للمستخدم (زي "Shobra" أو "Mohandiseen").
+
+الدالة بتتبعت لها f.zone (الـ ID)، بينما شيت الجوجل (Google Sheet) بنسبة 99% مكتوب فيه اسم المنطقة نفسه كـ نص مش الـ ID! فلما الدالة بتروح تدور في الشيت بـ ID مش بتلاقي تطابق وبترجع null.
+
+2. السبب الثاني: دالة getActualHoursFor3PL بتتوقع صيغة تاريخ معينة
+بما إننا مش شايفين الكود الداخلي للدالة getActualHoursFor3PL (وهي موجودة في نفس الملف ops_dashboard_v6_live_6.html)، فإحنا مش متأكدين هل هي بتاخد التاريخ بصيغة "Jun 20" وتعمل له تحويل، ولا مستنية علطول صيغة الشيت المباشرة "6/20".
+
+الحل النهائي لمعرفة المشكلة وحلها فوراً (كود الفحص الشامل):
+عشان ننهي المشكلة دي في ثواني، استبدل كود الـ map القديم بالكامل بـ كود الفحص ده. الكود ده هيجرب يبعت الاسم بدل الـ ID وهيجرب الصيغتين بتوع التاريخ، وهيقولك في الكونسول مين فيهم اللي نجحت وجابت داتا:
+
+JavaScript
+const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
     const zone = ZONES.find(z=>z.id===f.zone);
     const zoneName = zone ? zone.name : f.zone;
 
@@ -2428,7 +2889,113 @@ function renderCommitmentsSubTab(){
     } else {
       statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
     }
-    
+
+    return { ...f, zoneName, actual, officeTarget, statusBadge };
+});
+خطوتك القادمة:
+ضع هذا الكود، وافتح الـ Console واعمل ريفريش. شوف رقم كام من الأربعة (1 أو 2 أو 3 أو 4) اللي هيرجع لك رقم الساعات الحقيقي بدل null.
+
+بمجرد ما تشوف النتيجة، عدل السطر بتاع const actual = ... بـ التوليفة اللي نجحت، والجدول هيشتغل معاك فوراً!
+
+انا تعبت
+
+سلامتك من التعب يا صديقي، ومقدر جداً إحباطك.. اللف ورا الـ Bugs دي بيبخّ الصبر ويهد الحيل فعلاً لما الكود يعند بالشكل ده! حقك تزهق.
+
+علشان ما نخمنش تاني ونخلص من القصة دي فوراً، المشكلة مية في المية محبوسة جوه الصندوق الأسود اللي اسمه دالة getActualHoursFor3PL. الدالة دي بتاخد البيانات وبتدور بطريقتها الخاصة جوه الـ Cache، وبما إن كل المحاولات رجعت null، يبقى الدالة دي بتعمل حاجة إحنا مش شايفينها (ممكن تكون بتدور باسم الـ 3PL بشكل مختلف، أو بتركيبة تانية خالص).
+
+الحل المريح والسريع:
+اعمل Ctrl + F (بحث) جوه الملف عندك عن الكلمة دي:
+getActualHoursFor3PL
+
+هات لي الكود بتاع الدالة دي بس (غالباً هيكون 5 أو 6 سطور)، وحطه هنا. ده اللي هينور لنا الحتة الضلمة الأخيرة، وهصلحهالك ونقفل الصفحة دي وأنت مرتاح تماماً.
+
+هبعتهالك بس مش عاوز اغير فيها عشان مفيش حاجة تاني تضرب ظبط الكود التاني عليها بس
+
+حقك تماماً وده أصح قرار تعمله! مش هنلمس الدالة دي خالص ولا هنغير فيها حرف علشان نضمن إن مفيش أي حاجة تانية في السكريبت تضرب.
+
+كل اللي هنعمله إننا هنبص عليها بس علشان نفهم هي بتفكر إزاي ومستنية البيانات بـ أنهي شكل بالظبط، وبناءً على اللي هنشوفه، هنعدل في كود الـ map الخارجي بتاعنا إحنا بس، بحيث نبعت لها الداتا متقشرة وجاهزة على المقارنة فوراً.
+
+أنا مستنيك تبعتها، هاتها ويلا بينا نقفل الـ Bug ده ونرتاح! 🚀
+
+/* Look up actual hours a given 3PL worked, in a given zone, on a given ISO date.
+
+   Returns null if we have no WH data for that zone/3PL/date combination. */
+
+function getActualHoursFor3PL(zid, threePl, isoDate){
+
+  const zd = whCache[zid];
+
+  if(!zd) return null;
+
+  const label = isoToShortLabel(isoDate);
+
+  const colIdx = findWHDateCol(label);
+
+  if(colIdx<0) return null;
+
+  // Match 3PL name case-insensitively/trimmed (sheet names can vary slightly in casing)
+
+  const key = Object.keys(zd).find(n => n.trim().toLowerCase() === String(threePl).trim().toLowerCase());
+
+  if(!key) return null;
+
+  const hoursArr = zd[key];
+
+  if(!hoursArr) return null;
+
+  const v = hoursArr[colIdx];
+
+  return (v==null || isNaN(v)) ? null : Math.round(v);
+
+}
+
+أحييك جداً على قرارك.. ده تصرّف المبرمج المحترف! عدم اللمس في الدالة الأساسية (getActualHoursFor3PL) هو أضمن طريق علشان ما فيش حاجة تانية تضرب في السيستم.
+
+الآن، بعد ما شفنا الدالة من جوه، السر بان تماماً وعرفنا هي عاوزة إيه بالظبط:
+
+تحليل المشكلة بناءً على دالتك:
+الدالة بتاخد zid (يعني الـ ID بتاع الزون، وده اللي كنا باعتينه صح في الأول f.zone).
+
+الدالة بتاخد التاريخ وبتمرره لدالة تانية جواها اسمها isoToShortLabel(isoDate). ومن اسم الباراميتر isoDate، الدالة دي مستنية التاريخ يتبعت لها بصيغة ISO نظيفة وسادة زي (2026-06-20).
+
+بما إن الكود بتاعك كان بيبعت لها التاريخ النصي الطويل المبهدل (Sat Jun 20 2026 00:00:00 GMT+0300...)، فالدالة الداخلية دي كانت بتعطل وتطلع null.
+
+الحل النهائي (تظبيط الكود الخارجي ليتوافق مع الدالة):
+كل اللي هنعمله إننا هنحول التاريخ لصيغة ISO نظيفة (YYYY-MM-DD) يدوياً علشان نتجنب أي لغبطة في فرق التوقيت (Timezones)، وهنمررها للدالة زي ما هي عايزة بالظبط.
+
+اتفضل الكود كامل وجاهز للاستبدال:
+
+JavaScript
+const commitRows = filteredFollowUps
+  .slice()
+  .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+  .map(f => {
+    const zone = ZONES.find(z => z.id === f.zone);
+    const zoneName = zone ? zone.name : f.zone;
+
+    // 1️⃣ تحويل التاريخ الطويل إلى صيغة ISO نظيفة (YYYY-MM-DD) زي ما الدالة مستنية
+    const d = new Date(f.deadline);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const cleanIsoDate = `${yyyy}-${mm}-${dd}`; // النتيجة هتكون: "2026-06-20"
+
+    // 2️⃣ تمرير الـ ID الأصلي والتاريخ النظيف للدالة بدون أي تعديل فيها
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, cleanIsoDate);
+
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
+    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+
+    let statusBadge;
+    if (actual == null) {
+      statusBadge = deadlinePassed
+        ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
+        : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
+    } else if (actual >= f.hours) {
+      statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
+    } else {
+      statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
+    }
     // بقية الـ return بتاع الماب...
     return `
       <tr>
