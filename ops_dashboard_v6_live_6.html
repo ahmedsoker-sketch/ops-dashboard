@@ -2397,13 +2397,15 @@ function renderCommitmentsSubTab(){
   const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
     const zone = ZONES.find(z=>z.id===f.zone);
     const zoneName = zone ? zone.name : f.zone;
-    // 👇 حط السطور دي هنا بالظبط 👇
-    console.log("=== فحص تاريخ الديدلاين ===");
-    console.log("Zone:", zoneName, " | 3PL:", f.threePl);
-    console.log("Deadline value:", f.deadline);
-    console.log("Deadline Type:", typeof f.deadline);
-    console.log("===========================");
-    const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+
+    // --- التعديل هنا ---
+    const dateObj = new Date(f.deadline);
+    const formattedDeadlineForSheet = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+    
+    // بنمرر التاريخ المتformatting للشيت
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+    // -------------------
+
     const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
     const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
 
@@ -2417,7 +2419,8 @@ function renderCommitmentsSubTab(){
     } else {
       statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
     }
-
+    
+    // بقية الـ return بتاع الماب...
     return `
       <tr>
         <td style="padding:9px 12px;font-weight:700;font-size:13px">${escapeAttr(zoneName)}</td>
