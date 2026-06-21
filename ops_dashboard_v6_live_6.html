@@ -2402,21 +2402,24 @@ const commitRows = filteredFollowUps
     const zone = ZONES.find(z => z.id === f.zone);
     const zoneName = zone ? zone.name : f.zone;
 
-    // 1️⃣ تحويل التاريخ الطويل إلى صيغة ISO نظيفة (YYYY-MM-DD) زي ما الدالة مستنية
+    // 1️⃣ تحويل التاريخ بصيغة الـ ISO
     const d = new Date(f.deadline);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
-    const cleanIsoDate = `${yyyy}-${mm}-${dd}`; // النتيجة هتكون: "2026-06-20"
+    const cleanIsoDate = `${yyyy}-${mm}-${dd}`;
 
-    // 2️⃣ تمرير الـ ID الأصلي والتاريخ النظيف للدالة بدون أي تعديل فيها
+    // قراءة الساعات الفكرية
     const actual = getActualHoursFor3PL(f.zone, f.threePl, cleanIsoDate);
 
     const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
-    const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
+    
+    // 2️⃣ تعديل الإشارة لـ (<) علشان يوم النهاردة ما يعتبرش عدا لسه
+    const deadlinePassed = new Date(f.deadline) < new Date(todayISO());
 
     let statusBadge;
-    if (actual == null) {
+    // 3️⃣ تعديل الشرط: لو الداتا null "أو" لو الداتا بـ 0 والديدلاين لسه ما عداش (زي حالة النهاردة)
+    if (actual == null || (actual === 0 && !deadlinePassed)) {
       statusBadge = deadlinePassed
         ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
         : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
