@@ -2397,6 +2397,12 @@ function renderCommitmentsSubTab(){
   const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
     const zone = ZONES.find(z=>z.id===f.zone);
     const zoneName = zone ? zone.name : f.zone;
+    // 👇 حط السطور دي هنا بالظبط 👇
+    console.log("=== فحص تاريخ الديدلاين ===");
+    console.log("Zone:", zoneName, " | 3PL:", f.threePl);
+    console.log("Deadline value:", f.deadline);
+    console.log("Deadline Type:", typeof f.deadline);
+    console.log("===========================");
     const actual = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
     const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
     const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
