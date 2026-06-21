@@ -2394,27 +2394,31 @@ function renderCommitmentsSubTab(){
     : followUpsCache.filter(f=>commitZoneMulti.has(f.zone));
 
   // ── Commitment status rows ──
-  const commitRows = filteredFollowUps.slice().sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).map(f=>{
-    const zone = ZONES.find(z=>z.id===f.zone);
+  const commitRows = filteredFollowUps
+  .slice()
+  .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+  .map(f => {
+    const zone = ZONES.find(z => z.id === f.zone);
     const zoneName = zone ? zone.name : f.zone;
 
-    // --- التعديل هنا ---
-    const dateObj = new Date(f.deadline);
-    const formattedDeadlineForSheet = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-    
-    // بنمرر التاريخ المتformatting للشيت
-    const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
-    // -------------------
+    // 🌟 التعديل الجديد لتظبيط صيغة التاريخ لتطابق الشيت (مثال: "Jun 20") 🌟
+    const d = new Date(f.deadline);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formattedDeadlineForSheet = `${months[d.getMonth()]} ${d.getDate()}`;
 
-    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl]!=null) ? whTargets[f.zone][f.threePl] : null;
+    // هنا بنمرر التاريخ بالصيغة الجديدة المتظبطة للدالة
+    const actual = getActualHoursFor3PL(f.zone, f.threePl, formattedDeadlineForSheet);
+    // -------------------------------------------------------------
+
+    const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
     const deadlinePassed = new Date(f.deadline) <= new Date(todayISO());
 
     let statusBadge;
-    if(actual==null){
+    if (actual == null) {
       statusBadge = deadlinePassed
         ? `<span class="chip watch">⏳ No data yet for ${formatNiceDate(f.deadline)}</span>`
         : `<span class="chip watch">🕓 Pending — deadline not reached</span>`;
-    } else if(actual >= f.hours){
+    } else if (actual >= f.hours) {
       statusBadge = `<span class="chip good">✅ Achieved (${actual}h / ${f.hours}h)</span>`;
     } else {
       statusBadge = `<span class="chip bad">🚨 Not Achieved (${actual}h / ${f.hours}h)</span>`;
