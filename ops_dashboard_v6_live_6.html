@@ -2488,7 +2488,11 @@
       <span>Edit mode is on — change the values directly in the table and everything recalculates.</span>
     </div>
 
-    <nav class="tabs" id="tabs"></nav>
+    <nav class="tabs" id="tabs" style="display:flex;align-items:center"></nav>
+    <button onclick="runAiAnalysis()" id="ai-tab-btn" style="position:fixed;bottom:24px;right:24px;z-index:1000;font-family:inherit;font-size:13px;font-weight:800;padding:11px 18px;border-radius:50px;cursor:pointer;background:#fff;color:#1a1a1a;border:none;box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;align-items:center;gap:8px;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 6px 28px rgba(0,0,0,.25)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(0,0,0,.18)'">
+      <svg width="18" height="18" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1aa1f4"/><stop offset="100%" stop-color="#4285f4"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f4b400"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M96 16 C96 16 120 72 176 96 C120 120 96 176 96 176 C96 176 72 120 16 96 C72 72 96 16 96 16Z" fill="url(#g1)"/><path d="M96 56 C96 56 108 84 136 96 C108 108 96 136 96 136 C96 136 84 108 56 96 C84 84 96 56 96 56Z" fill="url(#g2)" opacity=".85"/></svg>
+      Gemini Analysis
+    </button>
 
     <div id="tpl-modal-overlay" onclick="if(event.target===this)closeTplModal()">
       <div id="tpl-modal">
@@ -2517,6 +2521,24 @@
     <div id="exportview" class="hidden"></div>
     <div id="analysisview" class="hidden"></div>
     <div id="followupview" class="hidden"></div>
+
+    <!-- ✨ AI Sidebar -->
+    <div id="ai-sidebar" style="position:fixed;top:0;right:-420px;width:400px;height:100vh;background:var(--card);border-left:1px solid var(--line);z-index:2000;display:flex;flex-direction:column;transition:right .3s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 32px rgba(0,0,0,.12)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <svg width="22" height="22" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1aa1f4"/><stop offset="100%" stop-color="#4285f4"/></linearGradient><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f4b400"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M96 16 C96 16 120 72 176 96 C120 120 96 176 96 176 C96 176 72 120 16 96 C72 72 96 16 96 16Z" fill="url(#sg1)"/><path d="M96 56 C96 56 108 84 136 96 C108 108 96 136 96 136 C96 136 84 108 56 96 C84 84 96 56 96 56Z" fill="url(#sg2)" opacity=".85"/></svg>
+          <div>
+            <div style="font-size:14px;font-weight:800;color:var(--ink)" id="ai-sidebar-title">Gemini Analysis</div>
+            <div style="font-size:11px;color:var(--muted)" id="ai-sidebar-tab">—</div>
+          </div>
+        </div>
+        <button onclick="closeAiSidebar()" style="border:none;background:var(--flat-bg);color:var(--muted);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px">✕</button>
+      </div>
+      <div id="ai-sidebar-body" style="flex:1;overflow-y:auto;padding:18px">
+        <div style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">اضغط على زرار AI في أي تاب عشان تبدأ التحليل</div>
+      </div>
+    </div>
+    <div id="ai-sidebar-overlay" onclick="closeAiSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:1999"></div>
 
     <div class="legend">
       <h3>How to read the colors</h3>
@@ -9050,6 +9072,153 @@ Be concise and direct. Format with clear numbered sections.`;
     });
     async function autoSyncOnLoad() {
       // replaced by startLivePolling() — kept as no-op for compatibility
+    }
+
+    /* ═══════════════════════════════════════════
+       ✨ AI SIDEBAR
+    ═══════════════════════════════════════════ */
+    function openAiSidebar() {
+      document.getElementById('ai-sidebar').style.right = '0';
+      document.getElementById('ai-sidebar-overlay').style.display = 'block';
+    }
+    function closeAiSidebar() {
+      document.getElementById('ai-sidebar').style.right = '-420px';
+      document.getElementById('ai-sidebar-overlay').style.display = 'none';
+    }
+
+    function getAiTabLabel() {
+      const labels = {
+        overview: 'Overview',
+        followup: '3PL Performance',
+        briefing: 'Briefing',
+        analysis: 'Analysis',
+        tasks: 'Tasks',
+        targets: 'Targets',
+        log: 'Action Log',
+        export: 'Export'
+      };
+      return labels[curTab] || (ZONES.find(z => z.id === curTab) ? ZONES.find(z => z.id === curTab).name : curTab);
+    }
+
+    function collectTabData() {
+      const today = state.labels.today || '';
+      const prev  = state.labels.prev  || '';
+
+      if (curTab === 'overview') {
+        const zonesData = ZONES.map(z => {
+          const bad = zoneBadFlags(z.id);
+          const metrics = META.map(m => {
+            const r = evalMetric(z.id, m);
+            return { metric: m.label || m.k, today: r.t, prev: r.p, status: r.s };
+          }).filter(x => x.today != null);
+          return { zone: z.name, droppedCount: bad.length, metrics };
+        }).filter(z => z.metrics.length > 0);
+        return `Dashboard Overview — ${today}\n\n${JSON.stringify(zonesData, null, 2)}`;
+      }
+
+      if (curTab === 'followup') {
+        const subLabel = { performance: 'Performance', commitments: 'Commitments', worst: 'Worst Offices', escalation: 'Escalation' }[fpSubTab] || fpSubTab;
+        if (fpSubTab === 'worst') {
+          const rows = computeWorstOfficesData();
+          return `3PL Performance — Worst Offices (${today})\n\n${JSON.stringify(rows.map(r => ({ office: r.name, zone: r.zoneName, mtdAvg: r.mtdAvg, target: r.tgt, hoursLost: r.gap })), null, 2)}`;
+        }
+        return `3PL Performance — ${subLabel} tab (${today})\nData available in the dashboard.`;
+      }
+
+      if (curTab === 'briefing') {
+        const zoneStats = [];
+        ZONES.forEach(z => {
+          const rows = sheetCache[z.id] || [];
+          const todayRow = rows.find(r => r.date === today);
+          const prevRow  = rows.find(r => r.date === prev);
+          if (!todayRow) return;
+          const entry = { zone: z.name };
+          META.forEach(m => { if (todayRow[m.k] != null) entry[m.k] = todayRow[m.k]; });
+          if (prevRow) META.forEach(m => { if (prevRow[m.k] != null) entry['prev_' + m.k] = prevRow[m.k]; });
+          zoneStats.push(entry);
+        });
+        return `Daily Briefing — ${today}\n\n${JSON.stringify(zoneStats, null, 2)}`;
+      }
+
+      if (ZONES.find(z => z.id === curTab)) {
+        const zid = curTab;
+        const rows = sheetCache[zid] || [];
+        const last5 = rows.slice(-5);
+        const metrics = META.map(m => {
+          const r = evalMetric(zid, m);
+          return { metric: m.label || m.k, today: r.t, prev: r.p, status: r.s, target: getMetricTarget(m.k, zid) };
+        }).filter(x => x.today != null);
+        return `Zone Detail — ${ZONES.find(z=>z.id===zid).name} — ${today}\n\nMetrics:\n${JSON.stringify(metrics, null, 2)}\n\nLast 5 days:\n${JSON.stringify(last5, null, 2)}`;
+      }
+
+      return `Tab: ${getAiTabLabel()} — ${today}\nNo structured data available for this tab.`;
+    }
+
+    async function runAiAnalysis() {
+      const tabLabel = getAiTabLabel();
+      document.getElementById('ai-sidebar-title').textContent = 'Gemini Analysis';
+      document.getElementById('ai-sidebar-tab').textContent = tabLabel;
+      openAiSidebar();
+
+      const body = document.getElementById('ai-sidebar-body');
+      body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:60px;color:var(--muted)">
+        <div style="font-size:28px">⏳</div>
+        <div style="font-size:13px">بيحلل البيانات…</div>
+      </div>`;
+
+      const tabData = collectTabData();
+      const prompt = `أنت مساعد عمليات خبير في تحليل بيانات التوصيل والـ 3PL.\n\nالتاب الحالي: ${tabLabel}\n\nالبيانات:\n${tabData}\n\nاعمل تحليل واضح ومفيد باللغة العربية:\n- ابدأ بأهم ملاحظة أو مشكلة\n- اربط الأرقام ببعضها (مثلاً UTR وقعت وDT ارتفع في نفس الوقت)\n- لو فيه مكاتب أو مناطق تحتاج attention، اذكرها بالاسم\n- اقترح خطوة عملية واحدة أو اتنين\n- كن مختصراً وعملياً، مش أكاديمي`;
+
+      const geminiKey = localStorage.getItem('gemini_api_key') || '';
+      if (!geminiKey) {
+        body.innerHTML = `<div style="font-size:13px;color:var(--ink);line-height:1.7">
+          <div style="font-weight:800;margin-bottom:12px">محتاج Gemini API Key</div>
+          <div style="color:var(--muted);margin-bottom:16px">مجاناً من Google — بدون credit card</div>
+          <ol style="color:var(--muted);padding-right:16px;margin-bottom:20px;font-size:12px;line-height:2">
+            <li>افتح <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#4285f4">aistudio.google.com</a></li>
+            <li>اضغط "Create API Key"</li>
+            <li>انسخ الـ Key والصقه هنا</li>
+          </ol>
+          <input id="gemini-key-input" type="password" placeholder="AIza..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-family:monospace;box-sizing:border-box;margin-bottom:10px">
+          <button onclick="(function(){const k=document.getElementById('gemini-key-input').value.trim();if(!k)return;localStorage.setItem('gemini_api_key',k);runAiAnalysis();})()" style="width:100%;font-family:inherit;font-size:13px;font-weight:800;padding:10px;border-radius:10px;cursor:pointer;background:#4285f4;color:#fff;border:none">حفظ وتشغيل ✨</button>
+        </div>`;
+        return;
+      }
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!text) throw new Error('No response');
+
+        // Render nicely — split by newlines into paragraphs
+        const formatted = text.split('\n').filter(l => l.trim()).map(line => {
+          if (line.startsWith('- ') || line.startsWith('• ')) {
+            return `<div style="display:flex;gap:8px;margin-bottom:8px"><span style="color:var(--accent);flex-shrink:0">•</span><span style="font-size:13px;line-height:1.6;color:var(--ink)">${line.replace(/^[-•]\s*/,'')}</span></div>`;
+          }
+          if (line.match(/^\*\*(.+)\*\*$/) || line.match(/^#{1,3} /)) {
+            return `<div style="font-size:13px;font-weight:800;color:var(--ink);margin:16px 0 8px">${line.replace(/^\*\*|\*\*$|^#{1,3} /g,'')}</div>`;
+          }
+          return `<div style="font-size:13px;line-height:1.7;color:var(--ink);margin-bottom:10px">${line}</div>`;
+        }).join('');
+
+        body.innerHTML = `
+          <div style="font-size:11px;color:var(--muted);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line)">
+            تحليل بتاريخ ${state.labels.today || '—'} · ${tabLabel}
+          </div>
+          ${formatted}
+          <div style="margin-top:24px;padding-top:14px;border-top:1px solid var(--line)">
+            <button onclick="runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line);width:100%">🔄 تحليل جديد</button>
+          </div>`;
+      } catch(e) {
+        body.innerHTML = `<div style="color:var(--bad);font-size:13px;margin-top:20px;text-align:center">
+          حصل خطأ أثناء التحليل 😕<br><br>
+          <button onclick="runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line)">حاول تاني</button>
+        </div>`;
+      }
     }
   </script>
 </body>
