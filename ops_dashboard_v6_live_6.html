@@ -4927,7 +4927,7 @@
     const subject = encodeURIComponent(`Escalation – ${zd.zoneName} WH Drop Impact`);
     const topList = top3.map(r => `• ${r.name}: −${Math.abs(r.gap)}h (${Math.round((r.mtdAvg/Math.max(zoneTotal,1))*100)}% zone share)`).join("\n");
     const body = encodeURIComponent(
-      `Dear Management,
+      `Hello Team,
 
 Please be advised that the ${zd.zoneName} zone is currently experiencing a critical supply drop, directly impacting our operational capacity.
 
@@ -4938,13 +4938,13 @@ Please be advised that the ${zd.zoneName} zone is currently experiencing a criti
 📍 Top Contributing Offices:
 ${topList}
 
-⚠️ Risk & Recommendation:
+⚠️ Recommendation:
 This gap is significantly impacting our performance and requires urgent attention to avoid further target shortfall. I recommend addressing this with the 3PL immediately and aligning on a recovery plan to close the gap.
 
 Please let me know the next steps you’d like me to take.
 
 Thank you,
-Giza Ops Team`
+Giza Log Team`
     );
 
     // Plain text for clipboard (Matches Gmail structure exactly)
@@ -4968,7 +4968,7 @@ This gap is significantly impacting our performance and requires urgent attentio
 Please let me know the next steps you’d like me to take.
 
 Thank you,
-Giza Ops Team`;
+Giza Log Team`;
 
     return `<div class="panel" style="padding:18px;margin-bottom:14px">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
