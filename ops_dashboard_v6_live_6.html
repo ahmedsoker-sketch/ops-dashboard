@@ -3465,7 +3465,7 @@
         t.appendChild(mk('overview', 'Overview'));
       }
       t.appendChild(mk('targets', '🎯 Targets'));
-      t.appendChild(mk('followup', '🚚 3PL Performance'));
+      t.appendChild(mk('followup', '🤝 3PL Performance'));
       t.appendChild(mk('briefing', '☀️ Briefing'));
       t.appendChild(mk('analysis', '🔬 Analysis'));
       t.appendChild(mk('tasks', '📋 Tasks'));
@@ -4870,7 +4870,7 @@
       };
     }
 
-    function renderEscalationSubTab() {
+  function renderEscalationSubTab() {
   // Use the same computeWorstOfficesData() rows — no duplication
   const allRows = computeWorstOfficesData();
   // Group by zone, pick worst 3 per zone, compute zone-level totals
@@ -4922,45 +4922,54 @@
     </div>
   </div>`;
     }).join("");
-    // Build email content
+
+    // Build email content (With your updated Risk & Recommendation)
     const subject = encodeURIComponent(`Escalation – ${zd.zoneName} WH Drop Impact`);
-    const topList = top3.map(r => `  • ${r.name}: −${Math.abs(r.gap)}h (${Math.round((r.mtdAvg/Math.max(zoneTotal,1))*100)}% of zone)`).join("\n");
+    const topList = top3.map(r => `• ${r.name}: −${Math.abs(r.gap)}h (${Math.round((r.mtdAvg/Math.max(zoneTotal,1))*100)}% zone share)`).join("\n");
     const body = encodeURIComponent(
       `Dear Management,
 
-${zd.zoneName} zone is currently impacted by a significant supply drop.
+Please be advised that the ${zd.zoneName} zone is currently experiencing a critical supply drop, directly impacting our operational capacity.
 
-Top contributing offices:
+📊 Performance Impact Summary:
+• Total WH Loss: −${zoneLoss}h
+• Estimated Rider Gap: ~${riderGap} riders
+
+📍 Top Contributing Offices:
 ${topList}
 
-Total WH Loss: −${zoneLoss}h
-Estimated Rider Gap: ~${riderGap} riders
+⚠️ Risk & Recommendation:
+This gap is significantly impacting our performance and requires urgent attention to avoid further target shortfall. I recommend addressing this with the 3PL immediately and aligning on a recovery plan to close the gap.
 
-This shortage is expected to negatively affect order completion and operational stability.
-We recommend immediate recovery actions from the mentioned offices.
+Please let me know the next steps you’d like me to take.
 
-Best regards,
-Giza Ops`
+Thank you,
+Giza Ops Team`
     );
-    // Plain text for clipboard
+
+    // Plain text for clipboard (Matches Gmail structure exactly)
     const plainText =
       `Escalation – ${zd.zoneName} WH Drop Impact
 
-Dear Management,
+Hello Team,
 
-${zd.zoneName} zone is currently impacted by a significant supply drop.
+Please be advised that the ${zd.zoneName} zone is currently experiencing a critical supply drop, directly impacting our operational capacity.
 
-Top contributing offices:
-${top3.map(r=>`  • ${r.name}: −${Math.abs(r.gap)}h`).join("\n")}
+📊 Performance Impact Summary:
+• Total WH Loss: −${zoneLoss}h
+• Estimated Rider Gap: ~${riderGap} riders
 
-Total WH Loss: −${zoneLoss}h
-Estimated Rider Gap: ~${riderGap} riders
+📍 Top Contributing Offices:
+${top3.map(r=>`• ${r.name}: −${Math.abs(r.gap)}h`).join("\n")}
 
-This shortage is expected to negatively affect order completion and operational stability.
-We recommend immediate recovery actions from the mentioned offices.
+⚠️ Recommendation:
+This gap is significantly impacting our performance and requires urgent attention to avoid further target shortfall. I recommend addressing this with the 3PL immediately and aligning on a recovery plan to close the gap.
 
-Best regards,
-Giza Ops`;
+Please let me know the next steps you’d like me to take.
+
+Thank you,
+Giza Ops Team`;
+
     return `<div class="panel" style="padding:18px;margin-bottom:14px">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
     <div>
@@ -5013,6 +5022,7 @@ function copyEscalationText(btn) {
     }, 2000);
   }).catch(() => alert(text));
 }
+
     function onFollowUpZoneChange() {
       const zid = document.getElementById("fu-zone")?.value;
       const sel = document.getElementById("fu-3pl");
