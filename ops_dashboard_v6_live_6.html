@@ -4871,62 +4871,62 @@
     }
 
     function renderEscalationSubTab() {
-      // Use the same computeWorstOfficesData() rows — no duplication
-      const allRows = computeWorstOfficesData();
-      // Group by zone, pick worst 3 per zone, compute zone-level totals
-      const byZone = {};
-      allRows.forEach(r => {
-        if (!byZone[r.zid]) byZone[r.zid] = {
-          zoneName: r.zoneName,
-          rows: [],
-          totalZoneHours: 0
-        };
-        byZone[r.zid].rows.push(r);
-      });
-      // Compute total zone hours (MTD avg across ALL 3PLs in that zone, for share calc)
-      ZONES.forEach(z => {
-        const zd = whCache[z.id];
-        if (!zd || !byZone[z.id]) return;
-        let total = 0;
-        Object.values(zd).forEach(arr => {
-          const mtd = arr.filter(v => v != null && v > 0);
-          if (mtd.length) total += mtd.reduce((a, b) => a + b, 0) / mtd.length;
-        });
-        byZone[z.id].totalZoneHours = Math.round(total);
-      });
-      const zoneIds = Object.keys(byZone);
-      if (!zoneIds.length) {
-        return `<div class="panel"><div style="padding:24px;color:var(--muted);text-align:center">
+  // Use the same computeWorstOfficesData() rows — no duplication
+  const allRows = computeWorstOfficesData();
+  // Group by zone, pick worst 3 per zone, compute zone-level totals
+  const byZone = {};
+  allRows.forEach(r => {
+    if (!byZone[r.zid]) byZone[r.zid] = {
+      zoneName: r.zoneName,
+      rows: [],
+      totalZoneHours: 0
+    };
+    byZone[r.zid].rows.push(r);
+  });
+  // Compute total zone hours (MTD avg across ALL 3PLs in that zone, for share calc)
+  ZONES.forEach(z => {
+    const zd = whCache[z.id];
+    if (!zd || !byZone[z.id]) return;
+    let total = 0;
+    Object.values(zd).forEach(arr => {
+      const mtd = arr.filter(v => v != null && v > 0);
+      if (mtd.length) total += mtd.reduce((a, b) => a + b, 0) / mtd.length;
+    });
+    byZone[z.id].totalZoneHours = Math.round(total);
+  });
+  const zoneIds = Object.keys(byZone);
+  if (!zoneIds.length) {
+    return `<div class="panel"><div style="padding:24px;color:var(--muted);text-align:center">
       🎉 No offices are currently under target — nothing to escalate!
     </div></div>`;
-      }
-      const cards = zoneIds.map(zid => {
-        const zd = byZone[zid];
-        const top3 = zd.rows.slice(0, 3);
-        const zoneTotal = zd.totalZoneHours;
-        const zoneLoss = zd.rows.reduce((s, r) => s + Math.abs(r.gap), 0);
-        const riderGap = Math.ceil(zoneLoss / HOURS_PER_RIDER);
-        const officeRows = top3.map(r => {
-          const share = zoneTotal > 0 ? Math.round((r.mtdAvg / zoneTotal) * 100) : 0;
-          const cs = commitStatusShort(r.zid, r.name);
-          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.name)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">
-            Share: <b>${share}%</b> of zone · Target: <b>${Math.round(r.tgt).toLocaleString()}h</b>
-          </div>
-        </div>
-        <div style="text-align:right;flex:none">
-          <div style="font-size:14px;font-weight:800;color:var(--bad)">−${Math.abs(r.gap).toLocaleString()}h</div>
-          <span class="chip ${cs.cls}" style="font-size:9.5px;padding:2px 7px;margin-top:3px;display:inline-block">${cs.label}</span>
-        </div>
-      </div>`;
-        }).join("");
-        // Build email content
-        const subject = encodeURIComponent(`Escalation – ${zd.zoneName} WH Drop Impact`);
-        const topList = top3.map(r => `  • ${r.name}: −${Math.abs(r.gap)}h (${Math.round((r.mtdAvg/Math.max(zoneTotal,1))*100)}% of zone)`).join("\n");
-        const body = encodeURIComponent(
-          `Dear Management,
+  }
+  const cards = zoneIds.map(zid => {
+    const zd = byZone[zid];
+    const top3 = zd.rows.slice(0, 3);
+    const zoneTotal = zd.totalZoneHours;
+    const zoneLoss = zd.rows.reduce((s, r) => s + Math.abs(r.gap), 0);
+    const riderGap = Math.ceil(zoneLoss / HOURS_PER_RIDER);
+    const officeRows = top3.map(r => {
+      const share = zoneTotal > 0 ? Math.round((r.mtdAvg / zoneTotal) * 100) : 0;
+      const cs = commitStatusShort(r.zid, r.name);
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.name)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">
+        Share: <b>${share}%</b> of zone · Target: <b>${Math.round(r.tgt).toLocaleString()}h</b>
+      </div>
+    </div>
+    <div style="text-align:right;flex:none">
+      <div style="font-size:14px;font-weight:800;color:var(--bad)">−${Math.abs(r.gap).toLocaleString()}h</div>
+      <span class="chip ${cs.cls}" style="font-size:9.5px;padding:2px 7px;margin-top:3px;display:inline-block">${cs.label}</span>
+    </div>
+  </div>`;
+    }).join("");
+    // Build email content
+    const subject = encodeURIComponent(`Escalation – ${zd.zoneName} WH Drop Impact`);
+    const topList = top3.map(r => `  • ${r.name}: −${Math.abs(r.gap)}h (${Math.round((r.mtdAvg/Math.max(zoneTotal,1))*100)}% of zone)`).join("\n");
+    const body = encodeURIComponent(
+      `Dear Management,
 
 ${zd.zoneName} zone is currently impacted by a significant supply drop.
 
@@ -4941,10 +4941,10 @@ We recommend immediate recovery actions from the mentioned offices.
 
 Best regards,
 Giza Ops`
-        );
-        // Plain text for clipboard
-        const plainText =
-          `Escalation – ${zd.zoneName} WH Drop Impact
+    );
+    // Plain text for clipboard
+    const plainText =
+      `Escalation – ${zd.zoneName} WH Drop Impact
 
 Dear Management,
 
@@ -4961,56 +4961,58 @@ We recommend immediate recovery actions from the mentioned offices.
 
 Best regards,
 Giza Ops`;
-        return `<div class="panel" style="padding:18px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div>
-          <div style="font-size:16px;font-weight:800">${escapeHtml(zd.zoneName)}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px">
-            Zone total MTD avg: <b>${zoneTotal.toLocaleString()}h</b> ·
-            Total loss: <span style="color:var(--bad);font-weight:700">−${zoneLoss.toLocaleString()}h</span> ·
-            Rider gap: <span style="color:var(--bad);font-weight:700">~${riderGap} riders</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a href="mailto:?subject=${subject}&body=${body}"
-            style="display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12.5px;font-weight:700;
-            padding:8px 16px;border-radius:9px;cursor:pointer;background:var(--accent);color:#fff;
-            text-decoration:none;border:none">
-            📧 Escalate
-          </a>
-          <button onclick="copyEscalationText(this, ${JSON.stringify(plainText).replace(/'/g,"&#39;")})"
-            style="font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;
-            cursor:pointer;background:#fff;color:var(--ink);border:1px solid var(--line)">
-            📋 Copy
-          </button>
-        </div>
+    return `<div class="panel" style="padding:18px;margin-bottom:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div>
+      <div style="font-size:16px;font-weight:800">${escapeHtml(zd.zoneName)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">
+        Zone total MTD avg: <b>${zoneTotal.toLocaleString()}h</b> ·
+        Total loss: <span style="color:var(--bad);font-weight:700">−${zoneLoss.toLocaleString()}h</span> ·
+        Rider gap: <span style="color:var(--bad);font-weight:700">~${riderGap} riders</span>
       </div>
-      <div style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">
-        Worst 3 Offices
-      </div>
-      ${officeRows}
-    </div>`;
-      }).join("");
-      return `<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
-    One card per zone that has offices under target. <b>Rider gap</b> = hours lost ÷ ${HOURS_PER_RIDER}h (avg per rider/day).
-    <b>Share</b> = the office's MTD avg as % of the zone's total MTD hours.
-  </div>${cards}`;
-    }
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}" target="_blank"
+        style="display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12.5px;font-weight:700;
+        padding:8px 16px;border-radius:9px;cursor:pointer;background:var(--accent);color:#fff;
+        text-decoration:none;border:none">
+        📧 Escalate
+      </a>
+      <button data-text="${encodeURIComponent(plainText)}" onclick="copyEscalationText(this)"
+        style="font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;
+        cursor:pointer;background:#fff;color:var(--ink);border:1px solid var(--line)">
+        📋 Copy
+      </button>
+    </div>
+  </div>
+  <div style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">
+    Worst 3 Offices
+  </div>
+  ${officeRows}
+</div>`;
+  }).join("");
+  return `<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+One card per zone that has offices under target. <b>Rider gap</b> = hours lost ÷ ${HOURS_PER_RIDER}h (avg per rider/day).
+<b>Share</b> = the office's MTD avg as % of the zone's total MTD hours.
+</div>${cards}`;
+}
 
-    function copyEscalationText(btn, text) {
-      navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = "✅ Copied!";
-        btn.style.background = "var(--good-bg)";
-        btn.style.color = "var(--good)";
-        setTimeout(() => {
-          btn.textContent = orig;
-          btn.style.background = "#fff";
-          btn.style.color = "var(--ink)";
-        }, 2000);
-      }).catch(() => alert(text));
-    }
-
+function copyEscalationText(btn) {
+  const encodedText = btn.getAttribute('data-text');
+  const text = decodeURIComponent(encodedText);
+  
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "✅ Copied!";
+    btn.style.background = "var(--good-bg)";
+    btn.style.color = "var(--good)";
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.background = "#fff";
+      btn.style.color = "var(--ink)";
+    }, 2000);
+  }).catch(() => alert(text));
+}
     function onFollowUpZoneChange() {
       const zid = document.getElementById("fu-zone")?.value;
       const sel = document.getElementById("fu-3pl");
