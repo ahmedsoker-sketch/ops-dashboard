@@ -4402,8 +4402,8 @@
     <div class="vmode" style="margin-bottom:16px;width:fit-content">
       <button class="${fpSubTab==='performance'?'active':''}" onclick="setFpSubTab('performance')">📊 Performance</button>
       <button class="${fpSubTab==='commitments'?'active':''}" onclick="setFpSubTab('commitments')">🤝 Commitments</button>
-      <button class="${fpSubTab==='worst'?'active':''}" onclick="setFpSubTab('worst')">⚠ Worst Offices</button>
-      <button class="${fpSubTab==='escalation'?'active':''}" onclick="setFpSubTab('escalation')">📧 Escalation</button>
+      <button class="${fpSubTab==='worst'?'active':''}" onclick="setFpSubTab('worst')">⚠ Worst 3PLs</button>
+      <button class="${fpSubTab==='escalation'?'active':''}" onclick="setFpSubTab('escalation')">📤 Escalation</button>
     </div>`;
       fv.innerHTML = subTabBar + (
         fpSubTab === "performance" ? renderPerformanceSubTab() :
