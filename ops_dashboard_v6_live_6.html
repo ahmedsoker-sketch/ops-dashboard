@@ -2489,9 +2489,9 @@
     </div>
 
     <nav class="tabs" id="tabs" style="display:flex;align-items:center"></nav>
-    <button onclick="runAiAnalysis()" id="ai-tab-btn" style="position:fixed;bottom:24px;right:24px;z-index:1000;font-family:inherit;font-size:13px;font-weight:800;padding:11px 18px;border-radius:50px;cursor:pointer;background:#fff;color:#1a1a1a;border:none;box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;align-items:center;gap:8px;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 6px 28px rgba(0,0,0,.25)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(0,0,0,.18)'">
-      <svg width="18" height="18" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1aa1f4"/><stop offset="100%" stop-color="#4285f4"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f4b400"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M96 16 C96 16 120 72 176 96 C120 120 96 176 96 176 C96 176 72 120 16 96 C72 72 96 16 96 16Z" fill="url(#g1)"/><path d="M96 56 C96 56 108 84 136 96 C108 108 96 136 96 136 C96 136 84 108 56 96 C84 84 96 56 96 56Z" fill="url(#g2)" opacity=".85"/></svg>
-      Gemini Analysis
+    <button onclick="runAiAnalysis()" id="ai-tab-btn" style="position:fixed;bottom:24px;right:24px;z-index:1000;font-family:inherit;font-size:13px;font-weight:800;padding:11px 18px;border-radius:50px;cursor:pointer;background:#f55036;color:#fff;border:none;box-shadow:0 4px 20px rgba(245,80,54,.4);display:flex;align-items:center;gap:8px;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 6px 28px rgba(245,80,54,.55)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(245,80,54,.4)'">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Groq Analysis
     </button>
 
     <div id="tpl-modal-overlay" onclick="if(event.target===this)closeTplModal()">
@@ -2526,9 +2526,9 @@
     <div id="ai-sidebar" style="position:fixed;top:0;right:-420px;width:400px;height:100vh;background:var(--card);border-left:1px solid var(--line);z-index:2000;display:flex;flex-direction:column;transition:right .3s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 32px rgba(0,0,0,.12)">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);flex-shrink:0">
         <div style="display:flex;align-items:center;gap:8px">
-          <svg width="22" height="22" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1aa1f4"/><stop offset="100%" stop-color="#4285f4"/></linearGradient><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f4b400"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M96 16 C96 16 120 72 176 96 C120 120 96 176 96 176 C96 176 72 120 16 96 C72 72 96 16 96 16Z" fill="url(#sg1)"/><path d="M96 56 C96 56 108 84 136 96 C108 108 96 136 96 136 C96 136 84 108 56 96 C84 84 96 56 96 56Z" fill="url(#sg2)" opacity=".85"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#f55036" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div>
-            <div style="font-size:14px;font-weight:800;color:var(--ink)" id="ai-sidebar-title">Gemini Analysis</div>
+            <div style="font-size:14px;font-weight:800;color:var(--ink)" id="ai-sidebar-title">Groq Analysis</div>
             <div style="font-size:11px;color:var(--muted)" id="ai-sidebar-tab">—</div>
           </div>
         </div>
@@ -9156,7 +9156,7 @@ Be concise and direct. Format with clear numbered sections.`;
 
     async function runAiAnalysis() {
       const tabLabel = getAiTabLabel();
-      document.getElementById('ai-sidebar-title').textContent = 'Gemini Analysis';
+      document.getElementById('ai-sidebar-title').textContent = 'Groq Analysis';
       document.getElementById('ai-sidebar-tab').textContent = tabLabel;
       openAiSidebar();
 
@@ -9169,30 +9169,35 @@ Be concise and direct. Format with clear numbered sections.`;
       const tabData = collectTabData();
       const prompt = `أنت مساعد عمليات خبير في تحليل بيانات التوصيل والـ 3PL.\n\nالتاب الحالي: ${tabLabel}\n\nالبيانات:\n${tabData}\n\nاعمل تحليل واضح ومفيد باللغة العربية:\n- ابدأ بأهم ملاحظة أو مشكلة\n- اربط الأرقام ببعضها (مثلاً UTR وقعت وDT ارتفع في نفس الوقت)\n- لو فيه مكاتب أو مناطق تحتاج attention، اذكرها بالاسم\n- اقترح خطوة عملية واحدة أو اتنين\n- كن مختصراً وعملياً، مش أكاديمي`;
 
-      const geminiKey = localStorage.getItem('gemini_api_key') || '';
-      if (!geminiKey) {
+      const groqKey = localStorage.getItem('groq_api_key') || '';
+      if (!groqKey) {
         body.innerHTML = `<div style="font-size:13px;color:var(--ink);line-height:1.7">
-          <div style="font-weight:800;margin-bottom:12px">محتاج Gemini API Key</div>
-          <div style="color:var(--muted);margin-bottom:16px">مجاناً من Google — بدون credit card</div>
+          <div style="font-weight:800;margin-bottom:12px">محتاج Groq API Key</div>
+          <div style="color:var(--muted);margin-bottom:16px">مجاناً — بدون credit card</div>
           <ol style="color:var(--muted);padding-right:16px;margin-bottom:20px;font-size:12px;line-height:2">
-            <li>افتح <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#4285f4">aistudio.google.com</a></li>
+            <li>افتح <a href="https://console.groq.com/keys" target="_blank" style="color:#f55036">console.groq.com/keys</a></li>
             <li>اضغط "Create API Key"</li>
             <li>انسخ الـ Key والصقه هنا</li>
           </ol>
-          <input id="gemini-key-input" type="password" placeholder="AIza..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-family:monospace;box-sizing:border-box;margin-bottom:10px">
-          <button onclick="(function(){const k=document.getElementById('gemini-key-input').value.trim();if(!k)return;localStorage.setItem('gemini_api_key',k);runAiAnalysis();})()" style="width:100%;font-family:inherit;font-size:13px;font-weight:800;padding:10px;border-radius:10px;cursor:pointer;background:#4285f4;color:#fff;border:none">حفظ وتشغيل ✨</button>
+          <input id="groq-key-input" type="password" placeholder="gsk_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-family:monospace;box-sizing:border-box;margin-bottom:10px">
+          <button onclick="(function(){const k=document.getElementById('groq-key-input').value.trim();if(!k)return;localStorage.setItem('groq_api_key',k);runAiAnalysis();})()\" style=\"width:100%;font-family:inherit;font-size:13px;font-weight:800;padding:10px;border-radius:10px;cursor:pointer;background:#f55036;color:#fff;border:none">حفظ وتشغيل ⚡</button>
         </div>`;
         return;
       }
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }]
+          })
         });
         const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (!text) throw new Error('No response');
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+        const text = data.choices?.[0]?.message?.content || '';
+        if (!text) throw new Error('No response from Groq');
 
         // Render nicely — split by newlines into paragraphs
         const formatted = text.split('\n').filter(l => l.trim()).map(line => {
@@ -9214,9 +9219,11 @@ Be concise and direct. Format with clear numbered sections.`;
             <button onclick="runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line);width:100%">🔄 تحليل جديد</button>
           </div>`;
       } catch(e) {
-        body.innerHTML = `<div style="color:var(--bad);font-size:13px;margin-top:20px;text-align:center">
-          حصل خطأ أثناء التحليل 😕<br><br>
-          <button onclick="runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line)">حاول تاني</button>
+        body.innerHTML = `<div style="font-size:13px;color:var(--ink);margin-top:20px">
+          <div style="color:var(--bad);font-weight:800;margin-bottom:10px">😕 حصل خطأ</div>
+          <div style="background:var(--flat-bg);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:16px;word-break:break-all">${e.message}</div>
+          <button onclick="runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line);width:100%;margin-bottom:8px">حاول تاني</button>
+          <button onclick="localStorage.removeItem('groq_api_key');runAiAnalysis()" style="font-family:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--bad);border:1px solid var(--line);width:100%">🔑 غير الـ API Key</button>
         </div>`;
       }
     }
