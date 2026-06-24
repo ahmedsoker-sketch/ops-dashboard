@@ -3657,6 +3657,10 @@
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Deadline *</label>
         <input id="qm-deadline" type="date" value="${todayISO()}" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
       </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Comment</label>
+        <input id="qm-comment" type="text" placeholder="e.g. MTA promised after escalation call" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+      </div>
       <div style="font-size:11.5px;color:var(--muted);line-height:1.6">
         This commitment will appear in the 3PL Performance → Commitments tab, and is compared against actual hours on the deadline date.
       </div>
@@ -3677,11 +3681,13 @@
         alert("Please select a 3PL and fill in Hours (a positive number) and Deadline.");
         return;
       }
+      const qmComment = document.getElementById("qm-comment")?.value?.trim() || "";
       const payload = {
         zone: zid,
         threePl,
         hours,
         deadline,
+        comment: qmComment,
         createdBy: ""
       };
       try {
@@ -4218,6 +4224,7 @@
         threePl,
         hours,
         deadline,
+        comment: (document.getElementById("fu-comment")?.value?.trim() || ""),
         createdBy: ""
       };
       try {
@@ -4246,6 +4253,14 @@
         console.error("addFollowUp:", e);
         showTaskToast("⚠ Save failed (no connection). Please retry.", "err");
       }
+    }
+    function showCommitNote(id) {
+      const f = followUpsCache.find(f => f.id === id);
+      if (!f || !f.comment) return;
+      document.getElementById('cnTitle').textContent = (f.threePl || "") + (f.zone ? " — " + f.zone : "");
+      document.getElementById('cnNote').textContent = f.comment;
+      document.getElementById('cnDate').textContent = f.deadline ? "Deadline: " + f.deadline : "";
+      document.getElementById('cnOverlay').style.display = 'flex';
     }
     async function deleteFollowUpEntry(id) {
       if (!confirm("Delete this commitment?")) return;
@@ -4308,6 +4323,7 @@
     let perfNameFilter = "all";
     let perfExpandedClusters = new Set(); // which clusters are expanded to show their zones
     let commitZoneMulti = new Set(); // multi-select zones for the Commitments sub-tab
+    let commitTplFilter = "all";
     let commitExpandedClusters = new Set();
     let worstZoneMulti = new Set(); // multi-select zones for the Worst Offices sub-tab
     let worstExpandedClusters = new Set();
@@ -4444,6 +4460,10 @@
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Deadline *</label>
           <input id="fu-deadline" type="date" value="${todayISO()}" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
         </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Comment</label>
+          <input id="fu-comment" type="text" placeholder="e.g. MTA promised after escalation call" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        </div>
       </div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">
         We'll compare this commitment against the 3PL's <b>actual hours on the deadline date</b> (from the 3PL WH sheet) once that date's data is available.
@@ -4459,9 +4479,10 @@
        </div>` :
         "";
       // Filter commitments by selected zones (Commitments sub-tab's own area filter)
-      const filteredFollowUps = commitZoneMulti.size === 0 ?
+      let filteredFollowUps = commitZoneMulti.size === 0 ?
         followUpsCache :
         followUpsCache.filter(f => commitZoneMulti.has(f.zone));
+      if (commitTplFilter !== "all") filteredFollowUps = filteredFollowUps.filter(f => f.threePl === commitTplFilter);
       // ── Commitment status rows ──
       const commitRows = filteredFollowUps
         .slice()
@@ -4515,7 +4536,7 @@
         <td style="padding:9px 8px;text-align:center;white-space:nowrap">${formatNiceDate(f.deadline)}</td>
         <td style="padding:9px 8px;text-align:center" class="num">${actual!=null ? actual+"h" : "—"}</td>
         <td style="padding:9px 8px;text-align:center">${statusBadge}</td>
-        <td style="padding:9px 8px;text-align:center"><button onclick="deleteFollowUpEntry('${escapeAttr(f.id)}')" style="font-size:11px;padding:4px 10px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">✕</button></td>
+        <td style="padding:9px 8px;text-align:center;white-space:nowrap">${f.comment ? '<button onclick="showCommitNote(\''+f.id+'\')" style="font-size:12px;padding:3px 7px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);margin-right:4px">&#8505;</button>' : ""}<button onclick="deleteFollowUpEntry('${escapeAttr(f.id)}')" style="font-size:11px;padding:4px 10px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">&#x2715;</button></td>
       </tr>`;
         }).join("");
       const totalCommits = filteredFollowUps.length;
@@ -4556,6 +4577,13 @@
     ${addForm}
     <div class="panel" style="padding:14px 14px 4px;margin-bottom:14px">
       ${renderAreaFilterPills(commitZoneMulti, commitExpandedClusters, "toggleCommitAreaFilter")}
+    </div>
+    <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:var(--muted);font-weight:600">Filter by 3PL:</span>
+      <select onchange="commitTplFilter=this.value;renderFollowUps()" style="font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">
+        <option value="all" ${commitTplFilter==="all"?"selected":""}>All 3PLs</option>
+        ${[...new Set(followUpsCache.map(f=>f.threePl))].filter(Boolean).sort().map(n=>`<option value="${escapeAttr(n)}" ${commitTplFilter===n?"selected":""}>${escapeAttr(n)}</option>`).join("")}
+      </select>
     </div>
     <div class="panel">
       ${totalCommits===0
@@ -5720,6 +5748,7 @@ Be concise and direct. Format with clear numbered sections.`;
           ${t.done?"background:var(--good-bg);color:var(--good);border-color:var(--good-line)":"background:var(--flat-bg);color:var(--flat);border-color:var(--line)"}">
           ${t.done?"✓ Done":"Mark done"}
         </button>
+        ${t.done && t.completion_note ? '<button onclick="showNoteModal(\''+escapeAttr(t.id)+'\')" style="font-size:12px;padding:3px 7px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted)">&#8505;</button>' : ""}
         <button onclick="deleteTask(\'${escapeAttr(t.id)}\')"
           style="font-size:11px;padding:4px 8px;color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg);border-radius:8px;cursor:pointer;border:1px solid">✕</button>
       </td>
@@ -5914,18 +5943,36 @@ Be concise and direct. Format with clear numbered sections.`;
       showAddTask = false;
       renderTasks();
     }
-    async function toggleTaskDone(id) {
+    function toggleTaskDone(id) {
       const t = tasksCache.find(t => t.id === id);
       if (!t) return;
-      t.done = !t.done;
+      document.getElementById('cpTitle').textContent = t.title || '';
+      document.getElementById('cpNote').value = '';
+      document.getElementById('cpOverlay').dataset.pid = id;
+      document.getElementById('cpOverlay').style.display = 'flex';
+      setTimeout(() => document.getElementById('cpNote').focus(), 100);
+    }
+    async function confirmDone(skip) {
+      const ov = document.getElementById('cpOverlay');
+      const t = tasksCache.find(t => t.id === ov.dataset.pid);
+      ov.style.display = 'none';
+      if (!t) return;
+      t.done = true;
+      if (!skip) { const n = document.getElementById('cpNote').value.trim(); if (n) t.completion_note = n; }
+      t.completed_at = new Date().toISOString().slice(0,10);
       const ok = await saveTasks();
-      if (ok) {
-        showTaskToast(t.done ? "✅ Marked done and saved." : "↩ Marked pending and saved.", "ok");
-      } else {
-        showTaskToast("⚠ Status changed locally but didn't save to the sheet.", "err");
-      }
+      showTaskToast(ok ? '✅ Marked done and saved.' : '⚠ Status changed locally but did not save.', ok ? 'ok' : 'err');
       renderTasks();
     }
+    function showNoteModal(id) {
+      const t = tasksCache.find(t => t.id === id);
+      if (!t || !t.completion_note) return;
+      document.getElementById('nmTitle').textContent = t.title || '';
+      document.getElementById('nmNote').textContent = t.completion_note;
+      document.getElementById('nmDate').textContent = t.completed_at ? 'Completed: ' + t.completed_at : '';
+      document.getElementById('nmOverlay').style.display = 'flex';
+    }
+
     async function deleteTask(id) {
       if (!confirm("Delete this task?")) return;
       const t = tasksCache.find(t => t.id === id);
@@ -9228,6 +9275,41 @@ Be concise and direct. Format with clear numbered sections.`;
       }
     }
   </script>
+
+<div id="cpOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:420px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">✅ Task Done!</div>
+    <div id="cpTitle" style="font-size:12px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">Any notes? <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+    <textarea id="cpNote" placeholder="e.g. Done but needed follow-up…" style="width:100%;height:88px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;outline:none"></textarea>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <button onclick="confirmDone(true)" style="font-size:13px;padding:8px 18px;border-radius:10px;border:1.5px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600">Skip</button>
+      <button onclick="confirmDone(false)" style="font-size:13px;padding:8px 22px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:700">✓ Done</button>
+    </div>
+  </div>
+</div>
+<div id="cnOverlay" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">&#128172; Commitment Note</div>
+    <div id="cnTitle" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+    <div id="cnNote" style="font-size:14px;color:var(--ink);line-height:1.6;background:var(--flat-bg);border-radius:10px;padding:12px 14px;min-height:60px"></div>
+    <div id="cnDate" style="font-size:11px;color:var(--muted);margin-top:10px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('cnOverlay').style.display='none'" style="font-size:13px;padding:8px 20px;border-radius:10px;border:1.5px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600">Close</button>
+    </div>
+  </div>
+</div>
+<div id="nmOverlay" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">&#128172; Completion Note</div>
+    <div id="nmTitle" style="font-size:12px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <div id="nmNote" style="font-size:14px;color:var(--ink);line-height:1.6;background:var(--flat-bg);border-radius:10px;padding:12px 14px;min-height:60px"></div>
+    <div id="nmDate" style="font-size:11px;color:var(--muted);margin-top:10px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('nmOverlay').style.display='none'" style="font-size:13px;padding:8px 20px;border-radius:10px;border:1.5px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600">Close</button>
+    </div>
+  </div>
+</div>
 </body>
 
 </html>
