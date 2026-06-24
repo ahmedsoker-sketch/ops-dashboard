@@ -3947,15 +3947,17 @@
     }
     const ACTIONS_KEY = "tlbOpsActions_v1";
     const ACTIONS_SCRIPT_URL = APPS_SCRIPT_URL;
-    const WH_SCRIPT_URL = APPS_SCRIPT_URL + "?action=getWH";
+    let selectedWHMonth = ""; // e.g. "3PL WH july"
+    let availableWHMonths = [];
     /* whCache: {zid: { tplName: {hours:[], target:N} }} */
     let whCache = {};
     let whDates = [];
-    let whTargets = {}; // {zid: {tplName: target}}
-    let whDataLoadedOK = false; // becomes true after the first successful loadWHData()
+    let whTargets = {};
+    let whDataLoadedOK = false;
     async function loadWHData() {
       try {
-        const resp = await fetch(WH_SCRIPT_URL, {
+        const monthParam = selectedWHMonth ? "&month=" + encodeURIComponent(selectedWHMonth) : "";
+        const resp = await fetch(APPS_SCRIPT_URL + "?action=getWH" + monthParam, {
           cache: "no-store"
         });
         if (!resp.ok) return;
@@ -4031,6 +4033,18 @@
         whDataLoadedOK = true;
         console.log("WH loaded - dates:", whDates.slice(0, 5), "...total:", whDates.length);
         console.log("WH zones:", Object.keys(whCache));
+        // Fetch available months (only once)
+        if (availableWHMonths.length === 0) {
+          try {
+            const mResp = await fetch(APPS_SCRIPT_URL + "?action=getWHMonths", { cache: "no-store" });
+            const mText = await mResp.text();
+            const parsed = JSON.parse(mText);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              availableWHMonths = parsed;
+              if (!selectedWHMonth) selectedWHMonth = parsed[parsed.length - 1];
+            }
+          } catch(me) { console.log("months fetch error:", me); }
+        }
         // Test: find Jun 14 col
         const testIdx = findWHDateCol("Jun 14");
         console.log("Jun 14 col index:", testIdx, "header:", whDates[testIdx]);
@@ -4263,6 +4277,7 @@
       document.getElementById('cnOverlay').style.display = 'flex';
     }
     async function deleteFollowUpEntry(id) {
+      if (!adminCheck()) return;
       if (!confirm("Delete this commitment?")) return;
       try {
         const resp = await fetch(FOLLOWUP_URL, {
@@ -4411,6 +4426,18 @@
       renderFollowUps();
     }
 
+    function renderWHMonthSelector() {
+      if (availableWHMonths.length <= 1) return "";
+      const opts = availableWHMonths.map(m => {
+        const label = m.replace(/^3pl wh /i, "").replace(/^w/, s => s.toUpperCase());
+        return '<option value="' + m + '" ' + (selectedWHMonth === m ? "selected" : "") + '>' + label + '</option>';
+      }).join("");
+      return '<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:14px">'
+        + '<span style="font-size:12px;color:var(--muted);font-weight:600">📅 Month:</span>'
+        + '<select onchange="selectedWHMonth=this.value;loadWHData().then(()=>renderFollowUps())" '
+        + 'style="font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">'
+        + opts + '</select></div>';
+    }
     function renderFollowUps() {
       const fv = document.getElementById("followupview");
       if (!fv) return;
@@ -4421,7 +4448,7 @@
       <button class="${fpSubTab==='worst'?'active':''}" onclick="setFpSubTab('worst')">⚠ Worst 3PLs</button>
       <button class="${fpSubTab==='escalation'?'active':''}" onclick="setFpSubTab('escalation')">📤 Escalation</button>
     </div>`;
-      fv.innerHTML = subTabBar + (
+      fv.innerHTML = renderWHMonthSelector() + subTabBar + (
         fpSubTab === "performance" ? renderPerformanceSubTab() :
         fpSubTab === "commitments" ? renderCommitmentsSubTab() :
         fpSubTab === "escalation" ? renderEscalationSubTab() :
@@ -5394,6 +5421,7 @@ function copyEscalationText(btn) {
       return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
     async function clearAction(key) {
+      if (!adminCheck()) return;
       if (!confirm("Remove this action?")) return;
       delete state.actions[key];
       if (state.actionDone) delete state.actionDone[key];
@@ -5973,7 +6001,16 @@ Be concise and direct. Format with clear numbered sections.`;
       document.getElementById('nmOverlay').style.display = 'flex';
     }
 
+    const ADMIN_PASSWORD = "12345";
+    function adminCheck() {
+      const pwd = prompt("🔒 Admin Password:");
+      if (pwd === null) return false; // cancelled
+      if (pwd === ADMIN_PASSWORD) return true;
+      alert("❌ Incorrect password.");
+      return false;
+    }
     async function deleteTask(id) {
+      if (!adminCheck()) return;
       if (!confirm("Delete this task?")) return;
       const t = tasksCache.find(t => t.id === id);
       tasksCache = tasksCache.filter(t => t.id !== id);
@@ -6293,7 +6330,7 @@ Be concise and direct. Format with clear numbered sections.`;
       <div style="font-size:18px;font-weight:800;margin-bottom:4px">🎯 Target Tracker</div>
       <div style="font-size:13px;color:var(--muted)">${periodLabel}</div>
     </div>
-    <button onclick="targetsEditMode=!targetsEditMode;renderTargets()"
+    <button onclick="if(!targetsEditMode && !adminCheck()) return; targetsEditMode=!targetsEditMode;renderTargets()"
       style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer;border:2px solid;
       ${targetsEditMode
         ? "background:#1a1a2e;color:#fff;border-color:#1a1a2e"
