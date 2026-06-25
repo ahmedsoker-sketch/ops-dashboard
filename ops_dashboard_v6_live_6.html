@@ -2518,6 +2518,7 @@
     <div id="taskview" class="hidden"></div>
     <div id="briefingview" class="hidden"></div>
     <div id="targetview" class="hidden"></div>
+    <div id="offendersview" class="hidden"></div>
     <div id="exportview" class="hidden"></div>
     <div id="analysisview" class="hidden"></div>
     <div id="followupview" class="hidden"></div>
@@ -3492,9 +3493,143 @@
       t.appendChild(mk('analysis', '🔬 Analysis'));
       t.appendChild(mk('tasks', '📋 Tasks'));
       t.appendChild(mk('log', 'Action Log' + (totalActions > 0 ? ' (' + totalActions + ')' : '')));
+      t.appendChild(mk('offenders', '🚨 Offenders'));
       t.appendChild(mk('export', '📤 Export'));
     }
 
+
+    // ════════════════════════════════════════════
+    // OFFENDERS TAB
+    // ════════════════════════════════════════════
+    async function loadOffenders() {
+      try {
+        const resp = await fetch(APPS_SCRIPT_URL + "?action=getOffenders", { cache: "no-store" });
+        const text = await resp.text();
+        offendersCache = JSON.parse(text);
+        offendersLoaded = true;
+      } catch(e) {
+        console.error("loadOffenders error:", e);
+        offendersCache = [];
+      }
+    }
+
+    function renderOffenders() {
+      const el = document.getElementById("offendersview");
+      if (!offendersLoaded) {
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
+        loadOffenders().then(() => renderOffenders());
+        return;
+      }
+
+      // Get unique zones
+      const zones = ["all", ...new Set(offendersCache.map(r => r.zone).filter(Boolean)).values()].sort();
+
+      // KPI config
+      const kpis = [
+        { id: "noshow",  label: "No Show Shifts",   field: "noshow",  dir: "high" },
+        { id: "late",    label: "Late Shifts >10m",  field: "late",    dir: "high" },
+        { id: "breaks",  label: "Break Time (hrs)",  field: "breaks",  dir: "high" },
+        { id: "avp",     label: "AVP %",             field: "avp",     dir: "low"  },
+      ];
+      const kpi = kpis.find(k => k.id === offKPI) || kpis[0];
+
+      // Filter by zone
+      let rows = offZone === "all" ? offendersCache : offendersCache.filter(r => r.zone === offZone);
+
+      // Filter by threshold
+      const thresh = parseFloat(offThreshold);
+      if (!isNaN(thresh)) {
+        rows = kpi.dir === "high"
+          ? rows.filter(r => (r[kpi.field] || 0) > thresh)
+          : rows.filter(r => (r[kpi.field] || 0) < thresh);
+      }
+
+      // Sort by KPI
+      rows = [...rows].sort((a, b) =>
+        kpi.dir === "high"
+          ? (b[kpi.field] || 0) - (a[kpi.field] || 0)
+          : (a[kpi.field] || 0) - (b[kpi.field] || 0)
+      );
+
+      // Top N
+      const topN = parseInt(offCount) || 10;
+      const displayed = rows.slice(0, topN);
+
+      // Zone average before/after
+      const zoneRows = offZone === "all" ? offendersCache : offendersCache.filter(r => r.zone === offZone);
+      const avgBefore = zoneRows.length ? (zoneRows.reduce((s, r) => s + (r[kpi.field] || 0), 0) / zoneRows.length) : 0;
+      const remaining = zoneRows.filter(r => !displayed.find(d => d.id === r.id));
+      const avgAfter  = remaining.length ? (remaining.reduce((s, r) => s + (r[kpi.field] || 0), 0) / remaining.length) : 0;
+
+      const fmt = v => kpi.id === "avp" ? v.toFixed(1) + "%" : kpi.id === "breaks" ? v.toFixed(1) + "h" : Math.round(v).toString();
+
+      el.innerHTML =
+        '<div style="padding:20px 4px">' +
+        '<h2 style="font-size:18px;font-weight:800;margin-bottom:16px">🚨 Offenders Analysis</h2>' +
+
+        // Filters row
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
+          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label>' +
+          '<select onchange="offZone=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' +
+          zones.map(z => '<option value="' + z + '" ' + (offZone === z ? "selected" : "") + '>' + (z === "all" ? "All Zones" : z) + '</option>').join("") +
+          '</select></div>' +
+
+          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">KPI</label>' +
+          '<select onchange="offKPI=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' +
+          kpis.map(k => '<option value="' + k.id + '" ' + (offKPI === k.id ? "selected" : "") + '>' + k.label + '</option>').join("") +
+          '</select></div>' +
+
+          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">' + (kpi.dir === "high" ? "فوق" : "تحت") + '</label>' +
+          '<input type="number" value="' + offThreshold + '" placeholder="e.g. 5" onchange="offThreshold=this.value;renderOffenders()" ' +
+          'style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:90px;font-family:inherit;color:var(--ink)"></div>' +
+
+          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">عدد الطيارين</label>' +
+          '<input type="number" value="' + offCount + '" min="1" max="50" onchange="offCount=this.value;renderOffenders()" ' +
+          'style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:80px;font-family:inherit;color:var(--ink)"></div>' +
+
+          '<button onclick="offendersLoaded=false;loadOffenders().then(()=>renderOffenders())" ' +
+          'style="font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600;margin-top:18px">🔄 Refresh</button>' +
+        '</div>' +
+
+        // Impact banner
+        (displayed.length > 0 ?
+        '<div style="background:var(--warn-bg,#fff7e6);border:1px solid var(--warn-line,#f5c76a);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--ink)">' +
+        '⚠️ لو اتخدت اكشن على <b>' + displayed.length + '</b> طيار — ' +
+        kpi.label + ' هيتحسن من <b>' + fmt(avgBefore) + '</b> لـ <b>' + fmt(avgAfter) + '</b>' +
+        '</div>' : '') +
+
+        // Table
+        '<div class="panel" style="overflow-x:auto;padding:0">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">#</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">RIDER ID</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">ZONE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">LATE >10m</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">BREAKS (h)</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">AVP %</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">WORK DAYS</th>' +
+        '</tr></thead><tbody>' +
+        displayed.map((r, i) => {
+          const highlight = 'background:' + (i % 2 === 0 ? 'var(--flat-bg)' : 'var(--card)');
+          const kpiBad = 'color:var(--bad);font-weight:700';
+          return '<tr style="' + highlight + ';border-bottom:1px solid var(--line)">' +
+            '<td style="padding:9px 14px;color:var(--muted)">' + (i+1) + '</td>' +
+            '<td style="padding:9px 14px;font-weight:700">' + (r.id || "-") + '</td>' +
+            '<td style="padding:9px 14px">' + (r.zone || "-") + '</td>' +
+            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="noshow"?kpiBad:"") + '">' + (r.noshow ?? "-") + '</td>' +
+            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="late"?kpiBad:"") + '">' + (r.late ?? "-") + '</td>' +
+            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="breaks"?kpiBad:"") + '">' + (r.breaks != null ? r.breaks.toFixed(1) : "-") + '</td>' +
+            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="avp"?kpiBad:"") + '">' + (r.avp != null ? r.avp + "%" : "-") + '</td>' +
+            '<td style="padding:9px 14px;text-align:right">' + (r.days ?? "-") + '</td>' +
+            '</tr>';
+        }).join("") +
+        (displayed.length === 0 ? '<tr><td colspan="8" style="padding:30px;text-align:center;color:var(--muted)">No riders match the filter</td></tr>' : '') +
+        '</tbody></table></div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding:0 4px">Showing ' + displayed.length + ' of ' + rows.length + ' riders' + (offZone!=="all"?" in "+offZone:"") + ' • Updated weekly</div>' +
+        '</div>';
+    }
     function renderOverview() {
       const ov = document.getElementById('overview');
       let html = '<div class="zmap">';
@@ -5490,7 +5625,13 @@ Be concise and direct. Format with clear numbered sections.`;
        ════════════════════════════════════════════ */
     const TASKS_URL = ACTIONS_SCRIPT_URL; // same Apps Script
     const TASKS_BACKUP_KEY = "tlbTasksBackup_v1";
-    let tasksCache = []; // [{id, title, owner, priority, deadline, done, notes, ts}]
+    let tasksCache = [];
+    let offendersCache = [];
+    let offendersLoaded = false;
+    let offZone = "all";
+    let offKPI = "noshow";
+    let offThreshold = "";
+    let offCount = 10; // [{id, title, owner, priority, deadline, done, notes, ts}]
     let taskFilter = "all"; // all | high | overdue | mine
     let taskOwnerFilter = "";
     let showAddTask = false;
@@ -8698,7 +8839,7 @@ Be concise and direct. Format with clear numbered sections.`;
       ov.classList.add("hidden");
       zv.classList.add("hidden");
       lv.classList.add("hidden");
-      ["taskview", "briefingview", "targetview", "exportview", "analysisview", "followupview"].forEach(id => {
+      ["taskview", "briefingview", "targetview", "exportview", "analysisview", "followupview", "offendersview"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add("hidden");
       });
@@ -8726,6 +8867,9 @@ Be concise and direct. Format with clear numbered sections.`;
       } else if (curTab === "analysis") {
         document.getElementById("analysisview").classList.remove("hidden");
         renderAnalysis();
+      } else if (curTab === "offenders") {
+        document.getElementById("offendersview").classList.remove("hidden");
+        renderOffenders();
       } else {
         zv.classList.remove("hidden");
         renderZone(curTab);
