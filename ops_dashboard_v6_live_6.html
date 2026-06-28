@@ -3563,7 +3563,10 @@
       const kpi = OFF_KPIS.find(k => k.id === offKPI) || OFF_KPIS[0];
       const latest = offLatestRows();
       const zones = ["all", ...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
+      const ZONES_WITH_TYPES_T = ["Mohandiseen", "Giza"];
+      const zoneHasTypes = offZone !== "all" && ZONES_WITH_TYPES_T.some(zn => offZone.toLowerCase().includes(zn.toLowerCase()));
       let rows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
+      if (zoneHasTypes && offType !== "all") rows = rows.filter(r => r.type === offType);
       const thresh = parseFloat(offThreshold);
       if (!isNaN(thresh)) rows = kpi.dir === "high" ? rows.filter(r => (r[kpi.field]||0) > thresh) : rows.filter(r => (r[kpi.field]||0) < thresh);
       rows = [...rows].sort((a,b) => kpi.dir === "high" ? (b[kpi.field]||0)-(a[kpi.field]||0) : (a[kpi.field]||0)-(b[kpi.field]||0));
@@ -3575,7 +3578,8 @@
       const avgAfter  = remaining.length ? remaining.reduce((s,r)=>s+(r[kpi.field]||0),0)/remaining.length : 0;
 
       return '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
-        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label><select onchange="offZone=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + zones.map(z=>'<option value="'+z+'" '+(offZone===z?"selected":"")+'>'+( z==="all"?"All Zones":z)+'</option>').join("") + '</select></div>' +
+        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label><select onchange="offZone=this.value;offType=\'all\';renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + zones.map(z=>'<option value="'+z+'" '+(offZone===z?"selected":"")+'>'+( z==="all"?"All Zones":z)+'</option>').join("") + '</select></div>' +
+        (zoneHasTypes ? '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Type</label><select onchange="offType=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)"><option value="all" '+(offType==="all"?"selected":"")+'>All Types</option><option value="Full" '+(offType==="Full"?"selected":"")+'>Full Time</option><option value="Part" '+(offType==="Part"?"selected":"")+'>Part Time</option></select></div>' : '') +
         '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">KPI</label><select onchange="offKPI=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + OFF_KPIS.map(k=>'<option value="'+k.id+'" '+(offKPI===k.id?"selected":"")+'>'+k.label+'</option>').join("") + '</select></div>' +
         '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">'+(kpi.dir==="high"?"فوق":"تحت")+'</label><input type="number" value="'+offThreshold+'" placeholder="e.g. 5" onchange="offThreshold=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:90px;font-family:inherit;color:var(--ink)"></div>' +
         '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">عدد الطيارين</label><input type="number" value="'+offCount+'" min="1" max="50" onchange="offCount=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:80px;font-family:inherit;color:var(--ink)"></div>' +
@@ -3614,38 +3618,73 @@
 
       let html = '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">📅 Week ' + week + ' — أسوأ 10 طيارين لكل KPI في كل منطقة</div>';
 
+      const ZONES_WITH_TYPES = ["Mohandiseen", "Giza"];
+
       zones.forEach(z => {
         const zr = latest.filter(r => r.zone === z);
-        let zoneHtml = '';
+        const hasTypes = ZONES_WITH_TYPES.some(zn => z.toLowerCase().includes(zn.toLowerCase()))
+          && zr.some(r => r.type === "Full" || r.type === "Part");
+        const groups = hasTypes
+          ? [{ label: "Full Time", rows: zr.filter(r => r.type === "Full") },
+             { label: "Part Time", rows: zr.filter(r => r.type === "Part") }]
+          : [{ label: null, rows: zr }];
 
-        kpis.forEach(kpi => {
-          // Sort by worst
-          const sorted = [...zr].filter(r => (r[kpi.field]||0) > 0)
-            .sort((a,b) => kpi.dir === "high"
-              ? (b[kpi.field]||0) - (a[kpi.field]||0)
-              : (a[kpi.field]||0) - (b[kpi.field]||0))
-            .slice(0, 10);
+        groups.forEach(group => {
+          const gr = group.rows;
+          if (!gr.length) return;
+          let zoneHtml = '';
 
-          if (!sorted.length) return; // skip if no issues
+          // ── حساب الـ 40 unique riders والساعات المفقودة ──
+          const usedIds = new Set();
+          const top40 = [];
+          kpis.forEach(kpi => {
+            const sorted = [...gr].filter(r => (r[kpi.field]||0) > 0 && !usedIds.has(r.id))
+              .sort((a,b) => kpi.dir === "high"
+                ? (b[kpi.field]||0) - (a[kpi.field]||0)
+                : (a[kpi.field]||0) - (b[kpi.field]||0))
+              .slice(0, 10);
+            sorted.forEach(r => { usedIds.add(r.id); top40.push(r); });
+          });
+          const totalHrsWeekly = top40.reduce((s, r) => s + (r.actualHrs || 0), 0);
+          const totalHrsDaily  = totalHrsWeekly / 7;
+          const lossTag = top40.length > 0 && totalHrsWeekly > 0
+            ? ' <span style="font-size:11px;font-weight:600;color:var(--bad);background:var(--bad-bg);border-radius:6px;padding:2px 8px;margin-left:6px">⚠️ LostHours: ' + Math.round(totalHrsWeekly) + 'h/Week · ' + Math.round(totalHrsDaily) + 'h/Day</span>'
+            : '';
 
-          const riders = sorted.map(r => {
-            const val = kpi.id === "avp" ? offFmt(r.avp,"avp") : kpi.id === "breaks" ? offFmt(r.breaks,"breaks") : (r[kpi.field]||0);
-            return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bad-bg);border-radius:6px;padding:3px 8px;margin:2px;font-size:12px">' +
-              '<b style="color:var(--ink)">' + r.id + '</b>' +
-              '<span style="color:var(--bad);font-weight:700">(' + val + ')</span></span>';
-          }).join("");
+          const displayUsedIds = new Set();
+          kpis.forEach(kpi => {
+            const sorted = [...gr].filter(r => (r[kpi.field]||0) > 0 && !displayUsedIds.has(r.id))
+              .sort((a,b) => kpi.dir === "high"
+                ? (b[kpi.field]||0) - (a[kpi.field]||0)
+                : (a[kpi.field]||0) - (b[kpi.field]||0))
+              .slice(0, 10);
 
-          zoneHtml += '<div style="margin-bottom:10px">' +
-            '<div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:4px">🔴 ' + kpi.label + '</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:2px">' + riders + '</div>' +
-            '</div>';
+            sorted.forEach(r => displayUsedIds.add(r.id));
+            if (!sorted.length) return;
+
+            const riders = sorted.map(r => {
+              const val = kpi.id === "avp" ? offFmt(r.avp,"avp") : kpi.id === "breaks" ? offFmt(r.breaks,"breaks") : (r[kpi.field]||0);
+              return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bad-bg);border-radius:6px;padding:3px 8px;margin:2px;font-size:12px">' +
+                '<b style="color:var(--ink)">' + r.id + '</b>' +
+                '<span style="color:var(--bad);font-weight:700">(' + val + ')</span></span>';
+            }).join("");
+
+            zoneHtml += '<div style="margin-bottom:10px">' +
+              '<div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:4px">🔴 ' + kpi.label + '</div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:2px">' + riders + '</div>' +
+              '</div>';
+          });
+
+          if (!zoneHtml) return;
+
+          const cardTitle = group.label
+            ? '📍 ' + z + ' — ' + group.label + ' <span style="font-size:12px;color:var(--muted);font-weight:400">(' + gr.length + ' riders)</span>' + lossTag
+            : '📍 ' + z + ' <span style="font-size:12px;color:var(--muted);font-weight:400">(' + gr.length + ' riders)</span>' + lossTag;
+
+          html += '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px">' +
+            '<div style="font-size:14px;font-weight:800;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)">' + cardTitle + '</div>' +
+            zoneHtml + '</div>';
         });
-
-        if (!zoneHtml) return; // skip zone if no issues at all
-
-        html += '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px">' +
-          '<div style="font-size:14px;font-weight:800;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)">📍 ' + z + ' <span style="font-size:12px;color:var(--muted);font-weight:400">(' + zr.length + ' riders)</span></div>' +
-          zoneHtml + '</div>';
       });
 
       const exportBtn = '<div style="margin-bottom:12px"><button onclick="offExportSummary()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>';
@@ -4942,12 +4981,18 @@
         }).join("");
       const totalCommits = filteredFollowUps.length;
       const achieved = filteredFollowUps.filter(f => {
-        const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
+        const dlObj = new Date(f.deadline);
+        const dlStr = `${dlObj.getFullYear()}-${String(dlObj.getMonth()+1).padStart(2,'0')}-${String(dlObj.getDate()).padStart(2,'0')}`;
+        const a = getActualHoursFor3PL(f.zone, f.threePl, dlStr);
         return a != null && a >= f.hours;
       }).length;
       const notAchieved = filteredFollowUps.filter(f => {
-        const a = getActualHoursFor3PL(f.zone, f.threePl, f.deadline);
-        return a != null && a < f.hours;
+        const dlObj = new Date(f.deadline);
+        const dlStr = `${dlObj.getFullYear()}-${String(dlObj.getMonth()+1).padStart(2,'0')}-${String(dlObj.getDate()).padStart(2,'0')}`;
+        const todayObj = new Date(todayISO());
+        const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
+        const a = getActualHoursFor3PL(f.zone, f.threePl, dlStr);
+        return a != null && a > 0 && a < f.hours && dlStr <= todayStr;
       }).length;
       const pendingCount = totalCommits - achieved - notAchieved;
       return `
@@ -5871,6 +5916,7 @@ Be concise and direct. Format with clear numbered sections.`;
     let offKPI = "noshow";
     let offThreshold = "";
     let offCount = 10; // [{id, title, owner, priority, deadline, done, notes, ts}]
+    let offType = "all"; // "all" | "Full" | "Part"
     let taskFilter = "all"; // all | high | overdue | mine
     let taskOwnerFilter = "";
     let showAddTask = false;
