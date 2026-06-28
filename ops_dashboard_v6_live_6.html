@@ -3499,8 +3499,13 @@
 
 
     // ════════════════════════════════════════════
-    // OFFENDERS TAB
+    // OFFENDERS TAB — 6 sub-tabs
     // ════════════════════════════════════════════
+    let offSubTab = "table"; // table | ai | zones | leaders | repeats | history
+    let offRiderSearch = "";
+    let offAIResult = "";
+    let offAILoading = false;
+
     async function loadOffenders() {
       try {
         const resp = await fetch(APPS_SCRIPT_URL + "?action=getOffenders", { cache: "no-store" });
@@ -3513,123 +3518,357 @@
       }
     }
 
+    // ── helpers ──
+    const OFF_KPIS = [
+      { id: "noshow", label: "No Show Shifts",  field: "noshow", dir: "high" },
+      { id: "late",   label: "Late Shifts >10m", field: "late",   dir: "high" },
+      { id: "breaks", label: "Break Time (hrs)", field: "breaks", dir: "high" },
+      { id: "avp",    label: "AVP %",            field: "avp",    dir: "low"  },
+    ];
+    function offFmt(v, kpiId) {
+      if (v == null) return "-";
+      if (kpiId === "avp") return v.toFixed(1) + "%";
+      if (kpiId === "breaks") return v.toFixed(1) + "h";
+      return Math.round(v).toString();
+    }
+    function offLatestWeek() {
+      if (!offendersCache.length) return 0;
+      return Math.max(...offendersCache.map(r => r.week || 0));
+    }
+    function offLatestRows() {
+      const w = offLatestWeek();
+      return offendersCache.filter(r => (r.week || 0) === w);
+    }
+
+    // ── sub-tab bar ──
+    function offSubTabBar() {
+      const tabs = [
+        { id: "table",   label: "📊 Offenders" },
+        { id: "ai",      label: "📋 Weekly Summary" },
+        { id: "repeats", label: "🔁 Repeat Offenders" },
+        { id: "history", label: "📋 Rider History" },
+        { id: "zones",   label: "📈 Zone Breakdown" },
+        { id: "leaders", label: "🏆 Leaderboard" },
+      ];
+      return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">' +
+        tabs.map(t =>
+          '<button onclick="offSubTab=\'' + t.id + '\';renderOffenders()" style="font-size:12px;padding:6px 14px;border-radius:20px;cursor:pointer;font-weight:600;border:1px solid ' +
+          (offSubTab === t.id ? 'var(--accent);background:var(--accent);color:#fff' : 'var(--line);background:var(--flat-bg);color:var(--muted)') +
+          '">' + t.label + '</button>'
+        ).join("") + '</div>';
+    }
+
+    // ── SUB-TAB: Offenders Table ──
+    function offRenderTable() {
+      const kpi = OFF_KPIS.find(k => k.id === offKPI) || OFF_KPIS[0];
+      const latest = offLatestRows();
+      const zones = ["all", ...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
+      let rows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
+      const thresh = parseFloat(offThreshold);
+      if (!isNaN(thresh)) rows = kpi.dir === "high" ? rows.filter(r => (r[kpi.field]||0) > thresh) : rows.filter(r => (r[kpi.field]||0) < thresh);
+      rows = [...rows].sort((a,b) => kpi.dir === "high" ? (b[kpi.field]||0)-(a[kpi.field]||0) : (a[kpi.field]||0)-(b[kpi.field]||0));
+      const topN = parseInt(offCount) || 10;
+      const displayed = rows.slice(0, topN);
+      const zoneRows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
+      const avgBefore = zoneRows.length ? zoneRows.reduce((s,r)=>s+(r[kpi.field]||0),0)/zoneRows.length : 0;
+      const remaining = zoneRows.filter(r => !displayed.find(d => d.id === r.id));
+      const avgAfter  = remaining.length ? remaining.reduce((s,r)=>s+(r[kpi.field]||0),0)/remaining.length : 0;
+
+      return '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
+        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label><select onchange="offZone=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + zones.map(z=>'<option value="'+z+'" '+(offZone===z?"selected":"")+'>'+( z==="all"?"All Zones":z)+'</option>').join("") + '</select></div>' +
+        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">KPI</label><select onchange="offKPI=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + OFF_KPIS.map(k=>'<option value="'+k.id+'" '+(offKPI===k.id?"selected":"")+'>'+k.label+'</option>').join("") + '</select></div>' +
+        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">'+(kpi.dir==="high"?"فوق":"تحت")+'</label><input type="number" value="'+offThreshold+'" placeholder="e.g. 5" onchange="offThreshold=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:90px;font-family:inherit;color:var(--ink)"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">عدد الطيارين</label><input type="number" value="'+offCount+'" min="1" max="50" onchange="offCount=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:80px;font-family:inherit;color:var(--ink)"></div>' +
+        '<button onclick="offendersLoaded=false;loadOffenders().then(()=>renderOffenders())" style="font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600;margin-top:18px">🔄 Refresh</button>' +
+        '</div>' +
+        (displayed.length > 0 ? '<div style="background:#fff7e6;border:1px solid #f5c76a;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13px">⚠️ لو اتخدت اكشن على <b>'+displayed.length+'</b> طيار — '+kpi.label+' هيتحسن من <b>'+offFmt(avgBefore,kpi.id)+'</b> لـ <b>'+offFmt(avgAfter,kpi.id)+'</b></div>' : '') +
+        '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">#</th><th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">RIDER ID</th><th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">ZONE</th><th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">NO SHOW</th><th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">LATE</th><th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">BREAKS</th><th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVP%</th><th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">DAYS</th>' +
+        '</tr></thead><tbody>' +
+        displayed.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px;color:var(--muted)">'+(i+1)+'</td>' +
+          '<td style="padding:9px 14px;font-weight:700;cursor:pointer;color:var(--accent)" onclick="offRiderSearch=String(r.id);offSubTab=\'history\';renderOffenders()">'+r.id+'</td>' +
+          '<td style="padding:9px 14px">'+r.zone+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(offKPI==="noshow"?"color:var(--bad);font-weight:700":"")+'">'+r.noshow+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(offKPI==="late"?"color:var(--bad);font-weight:700":"")+'">'+r.late+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(offKPI==="breaks"?"color:var(--bad);font-weight:700":"")+'">'+offFmt(r.breaks,"breaks")+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(offKPI==="avp"?"color:var(--bad);font-weight:700":"")+'">'+offFmt(r.avp,"avp")+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.days+'</td></tr>'
+        ).join("") +
+        (displayed.length===0?'<tr><td colspan="8" style="padding:30px;text-align:center;color:var(--muted)">No riders match</td></tr>':'') +
+        '</tbody></table></div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:8px">Week '+offLatestWeek()+' • '+displayed.length+' of '+rows.length+' riders • Click Rider ID to view history</div>';
+    }
+
+    // ── SUB-TAB: Weekly Summary (no API) ──
+    function offRenderAI() {
+      const latest = offLatestRows();
+      const week = offLatestWeek();
+      const zones = [...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
+      const kpis = [
+        { id: "noshow", label: "No Show",    field: "noshow", dir: "high" },
+        { id: "late",   label: "Late >10m",  field: "late",   dir: "high" },
+        { id: "breaks", label: "Breaks (h)", field: "breaks", dir: "high" },
+        { id: "avp",    label: "AVP%",       field: "avp",    dir: "low"  },
+      ];
+
+      let html = '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">📅 Week ' + week + ' — أسوأ 10 طيارين لكل KPI في كل منطقة</div>';
+
+      zones.forEach(z => {
+        const zr = latest.filter(r => r.zone === z);
+        let zoneHtml = '';
+
+        kpis.forEach(kpi => {
+          // Sort by worst
+          const sorted = [...zr].filter(r => (r[kpi.field]||0) > 0)
+            .sort((a,b) => kpi.dir === "high"
+              ? (b[kpi.field]||0) - (a[kpi.field]||0)
+              : (a[kpi.field]||0) - (b[kpi.field]||0))
+            .slice(0, 10);
+
+          if (!sorted.length) return; // skip if no issues
+
+          const riders = sorted.map(r => {
+            const val = kpi.id === "avp" ? offFmt(r.avp,"avp") : kpi.id === "breaks" ? offFmt(r.breaks,"breaks") : (r[kpi.field]||0);
+            return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bad-bg);border-radius:6px;padding:3px 8px;margin:2px;font-size:12px">' +
+              '<b style="color:var(--ink)">' + r.id + '</b>' +
+              '<span style="color:var(--bad);font-weight:700">(' + val + ')</span></span>';
+          }).join("");
+
+          zoneHtml += '<div style="margin-bottom:10px">' +
+            '<div style="font-size:12px;font-weight:700;color:var(--bad);margin-bottom:4px">🔴 ' + kpi.label + '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:2px">' + riders + '</div>' +
+            '</div>';
+        });
+
+        if (!zoneHtml) return; // skip zone if no issues at all
+
+        html += '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px">' +
+          '<div style="font-size:14px;font-weight:800;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)">📍 ' + z + ' <span style="font-size:12px;color:var(--muted);font-weight:400">(' + zr.length + ' riders)</span></div>' +
+          zoneHtml + '</div>';
+      });
+
+      const exportBtn = '<div style="margin-bottom:12px"><button onclick="offExportSummary()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>';
+      return exportBtn + (html || '<div style="padding:40px;text-align:center;color:var(--muted)">No issues found this week</div>');
+    }
+    function offExportSummary() {
+      const latest = offLatestRows();
+      const kpis = [{id:"noshow",label:"No Show",field:"noshow",dir:"high"},{id:"late",label:"Late",field:"late",dir:"high"},{id:"breaks",label:"Breaks",field:"breaks",dir:"high"},{id:"avp",label:"AVP%",field:"avp",dir:"low"}];
+      const rows = [];
+      [...new Set(latest.map(r=>r.zone).filter(Boolean))].sort().forEach(z => {
+        const zr = latest.filter(r=>r.zone===z);
+        kpis.forEach(kpi => {
+          [...zr].filter(r=>(r[kpi.field]||0)>0)
+            .sort((a,b)=>kpi.dir==="high"?(b[kpi.field]||0)-(a[kpi.field]||0):(a[kpi.field]||0)-(b[kpi.field]||0))
+            .slice(0,10).forEach((r,i) => rows.push([z, kpi.label, i+1, r.id, r[kpi.field]||0]));
+        });
+      });
+      offExportCSV("weekly_summary_w" + offLatestWeek() + ".csv", ["Zone","KPI","Rank","Rider ID","Value"], rows);
+    }
+
+    // ── SUB-TAB: Zone Breakdown ──
+    function offRenderZones() {
+      const latest = offLatestRows();
+      const zones = [...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
+      const rows = zones.map(z => {
+        const zr = latest.filter(r => r.zone === z);
+        const avg = f => zr.length ? (zr.reduce((s,r)=>s+(r[f]||0),0)/zr.length) : 0;
+        return { zone: z, count: zr.length, noshow: avg("noshow"), late: avg("late"), breaks: avg("breaks"), avp: avg("avp") };
+      }).sort((a,b) => b.noshow - a.noshow);
+
+      const maxNoshow = Math.max(...rows.map(r=>r.noshow), 1);
+
+      return '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">ZONE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">RIDERS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVG NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVG LATE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVG BREAKS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVG AVP%</th>' +
+        '<th style="padding:10px 14px;color:var(--muted);font-size:11px;font-weight:700">NO SHOW BAR</th>' +
+        '</tr></thead><tbody>' +
+        rows.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px;font-weight:700">'+r.zone+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;color:var(--muted)">'+r.count+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;color:var(--bad);font-weight:700">'+r.noshow.toFixed(1)+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.late.toFixed(1)+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.breaks.toFixed(1)+'h</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.avp.toFixed(1)+'%</td>' +
+          '<td style="padding:9px 14px;min-width:120px"><div style="background:var(--bad-bg);border-radius:4px;overflow:hidden;height:8px"><div style="background:var(--bad);height:8px;width:'+(r.noshow/maxNoshow*100).toFixed(0)+'%;border-radius:4px"></div></div></td>' +
+          '</tr>'
+        ).join("") +
+        '</tbody></table></div>';
+    }
+
+    // ── SUB-TAB: Leaderboard ──
+    function offRenderLeaders() {
+      const latest = offLatestRows();
+      const rows = [...latest]
+        .filter(r => r.avp > 0)
+        .sort((a,b) => b.avp - a.avp)
+        .slice(0, 15);
+      const medals = ["🥇","🥈","🥉"];
+      return '<div style="margin-bottom:12px;font-size:13px;color:var(--muted)">Top performers this week by AVP% — Week ' + offLatestWeek() + '</div>' +
+        '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">#</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">RIDER ID</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">ZONE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVP%</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">DAYS</th>' +
+        '</tr></thead><tbody>' +
+        rows.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px">'+(medals[i]||i+1)+'</td>' +
+          '<td style="padding:9px 14px;font-weight:700">'+r.id+'</td>' +
+          '<td style="padding:9px 14px">'+r.zone+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;color:var(--good);font-weight:700">'+offFmt(r.avp,"avp")+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.noshow+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.days+'</td></tr>'
+        ).join("") +
+        '</tbody></table></div>';
+    }
+
+    // ── SUB-TAB: Repeat Offenders ──
+    function offRenderRepeats() {
+      const weeks = [...new Set(offendersCache.map(r=>r.week||0))].sort((a,b)=>a-b);
+      if (weeks.length < 2) return '<div style="padding:40px;text-align:center;color:var(--muted)">Need at least 2 weeks of data to show repeat offenders</div>';
+      const counts = {};
+      offendersCache.forEach(r => {
+        if ((r.noshow||0) > 0 || (r.late||0) > 0) {
+          if (!counts[r.id]) counts[r.id] = { id: r.id, zone: r.zone, weeks: new Set(), noshow: 0, late: 0 };
+          counts[r.id].weeks.add(r.week);
+          counts[r.id].noshow += (r.noshow||0);
+          counts[r.id].late += (r.late||0);
+        }
+      });
+      const repeats = Object.values(counts).filter(r => r.weeks.size >= 2).sort((a,b) => b.weeks.size - a.weeks.size);
+      if (!repeats.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">No repeat offenders found across weeks</div>';
+      return '<div style="margin-bottom:12px;font-size:13px;color:var(--muted)">Riders with issues in 2+ weeks</div>' +
+        '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">RIDER ID</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">ZONE</th>' +
+        '<th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;font-weight:700">WEEKS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">TOTAL NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">TOTAL LATE</th>' +
+        '</tr></thead><tbody>' +
+        repeats.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px;font-weight:700;cursor:pointer;color:var(--accent)" onclick="offRiderSearch=String(r.id);offSubTab=\'history\';renderOffenders()">'+r.id+'</td>' +
+          '<td style="padding:9px 14px">'+r.zone+'</td>' +
+          '<td style="padding:9px 14px;text-align:center"><span style="background:var(--bad-bg);color:var(--bad);font-weight:700;padding:2px 10px;border-radius:20px;font-size:12px">'+r.weeks.size+' weeks</span></td>' +
+          '<td style="padding:9px 14px;text-align:right;color:var(--bad);font-weight:700">'+r.noshow+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.late+'</td></tr>'
+        ).join("") +
+        '</tbody></table></div>';
+    }
+
+    // ── SUB-TAB: Rider History ──
+    function offRenderHistory() {
+      const riderRows = offRiderSearch ? offendersCache.filter(r => String(r.id) === String(offRiderSearch)) : [];
+      const weeks = [...new Set(offendersCache.map(r=>r.week||0))].sort((a,b)=>a-b);
+      return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">' +
+        '<input type="text" value="'+offRiderSearch+'" placeholder="Enter Rider ID..." onchange="offRiderSearch=this.value" oninput="offRiderSearch=this.value" ' +
+        'style="font-size:13px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;width:200px;color:var(--ink)">' +
+        '<button onclick="renderOffenders()" style="font-size:13px;padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:700">Search</button>' +
+        '</div>' +
+        (!offRiderSearch ? '<div style="padding:30px;text-align:center;color:var(--muted)">Enter a Rider ID to view their history</div>' :
+        riderRows.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--muted)">No data found for Rider '+offRiderSearch+'</div>' :
+        '<div style="margin-bottom:8px;font-size:13px;color:var(--muted)">Rider <b>'+offRiderSearch+'</b> — '+riderRows[0].zone+' — '+riderRows.length+' week(s) of data</div>' +
+        '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;font-weight:700">WEEK</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">LATE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">BREAKS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVP%</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">DAYS</th>' +
+        '</tr></thead><tbody>' +
+        riderRows.sort((a,b)=>a.week-b.week).map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px;text-align:center;font-weight:700">W'+r.week+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(r.noshow>0?"color:var(--bad);font-weight:700":"")+'">'+r.noshow+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;'+(r.late>0?"color:var(--bad);font-weight:700":"")+'">'+r.late+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+offFmt(r.breaks,"breaks")+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+offFmt(r.avp,"avp")+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.days+'</td></tr>'
+        ).join("") +
+        '</tbody></table></div>' +
+        '<div style="margin-top:10px"><button onclick="offExportHistory()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>');
+    }
+    function offExportHistory() {
+      const rows = offendersCache.filter(r => String(r.id) === String(offRiderSearch)).sort((a,b)=>a.week-b.week);
+      offExportCSV("rider_" + offRiderSearch + "_history.csv",
+        ["Week","Rider ID","Zone","No Show","Late","Breaks (h)","AVP%","Days"],
+        rows.map(r => ["W"+r.week, r.id, r.zone, r.noshow, r.late, (r.breaks||0).toFixed(1), r.avp, r.days])
+      );
+    }
+
+    // ── CSV Export helper ──
+    function offExportCSV(filename, headers, rows) {
+      const csv = [headers.join(","), ...rows.map(r => r.map(v => '"' + String(v||"").replace(/"/g,'""') + '"').join(","))].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+    function offExportTable() {
+      const kpi = OFF_KPIS.find(k => k.id === offKPI) || OFF_KPIS[0];
+      const latest = offLatestRows();
+      let rows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
+      const thresh = parseFloat(offThreshold);
+      if (!isNaN(thresh)) rows = kpi.dir==="high" ? rows.filter(r=>(r[kpi.field]||0)>thresh) : rows.filter(r=>(r[kpi.field]||0)<thresh);
+      rows = [...rows].sort((a,b)=>kpi.dir==="high"?(b[kpi.field]||0)-(a[kpi.field]||0):(a[kpi.field]||0)-(b[kpi.field]||0)).slice(0,parseInt(offCount)||10);
+      offExportCSV("offenders_w"+offLatestWeek()+".csv", ["Rider ID","Zone","No Show","Late","Breaks (h)","AVP%","Days","Week"],
+        rows.map(r=>[r.id,r.zone,r.noshow,r.late,(r.breaks||0).toFixed(1),r.avp,r.days,r.week]));
+    }
+    function offExportZones() {
+      const latest = offLatestRows();
+      const zones = [...new Set(latest.map(r=>r.zone).filter(Boolean))].sort();
+      const rows = zones.map(z => {
+        const zr = latest.filter(r=>r.zone===z);
+        const avg = f => zr.length?(zr.reduce((s,r)=>s+(r[f]||0),0)/zr.length).toFixed(2):"0";
+        return [z,zr.length,avg("noshow"),avg("late"),avg("breaks"),avg("avp")];
+      });
+      offExportCSV("zones_w"+offLatestWeek()+".csv",["Zone","Riders","Avg No Show","Avg Late","Avg Breaks","Avg AVP%"],rows);
+    }
+    function offExportLeaders() {
+      const rows = [...offLatestRows()].filter(r=>r.avp>0).sort((a,b)=>b.avp-a.avp).slice(0,15);
+      offExportCSV("leaderboard_w"+offLatestWeek()+".csv",["#","Rider ID","Zone","AVP%","No Show","Days"],
+        rows.map((r,i)=>[i+1,r.id,r.zone,r.avp,r.noshow,r.days]));
+    }
+    function offExportRepeats() {
+      const counts = {};
+      offendersCache.forEach(r => {
+        if ((r.noshow||0)>0||(r.late||0)>0) {
+          if (!counts[r.id]) counts[r.id]={id:r.id,zone:r.zone,weeks:new Set(),noshow:0,late:0};
+          counts[r.id].weeks.add(r.week); counts[r.id].noshow+=(r.noshow||0); counts[r.id].late+=(r.late||0);
+        }
+      });
+      const rows = Object.values(counts).filter(r=>r.weeks.size>=2).sort((a,b)=>b.weeks.size-a.weeks.size);
+      offExportCSV("repeat_offenders.csv",["Rider ID","Zone","Weeks Count","Total No Show","Total Late"],
+        rows.map(r=>[r.id,r.zone,r.weeks.size,r.noshow,r.late]));
+    }
+
+    // ── MAIN RENDER ──
     function renderOffenders() {
       const el = document.getElementById("offendersview");
       if (!offendersLoaded) {
-        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">⏳ Loading...</div>';
         loadOffenders().then(() => renderOffenders());
         return;
       }
-
-      // Get unique zones
-      const zones = ["all", ...new Set(offendersCache.map(r => r.zone).filter(Boolean)).values()].sort();
-
-      // KPI config
-      const kpis = [
-        { id: "noshow",  label: "No Show Shifts",   field: "noshow",  dir: "high" },
-        { id: "late",    label: "Late Shifts >10m",  field: "late",    dir: "high" },
-        { id: "breaks",  label: "Break Time (hrs)",  field: "breaks",  dir: "high" },
-        { id: "avp",     label: "AVP %",             field: "avp",     dir: "low"  },
-      ];
-      const kpi = kpis.find(k => k.id === offKPI) || kpis[0];
-
-      // Filter by zone
-      let rows = offZone === "all" ? offendersCache : offendersCache.filter(r => r.zone === offZone);
-
-      // Filter by threshold
-      const thresh = parseFloat(offThreshold);
-      if (!isNaN(thresh)) {
-        rows = kpi.dir === "high"
-          ? rows.filter(r => (r[kpi.field] || 0) > thresh)
-          : rows.filter(r => (r[kpi.field] || 0) < thresh);
-      }
-
-      // Sort by KPI
-      rows = [...rows].sort((a, b) =>
-        kpi.dir === "high"
-          ? (b[kpi.field] || 0) - (a[kpi.field] || 0)
-          : (a[kpi.field] || 0) - (b[kpi.field] || 0)
-      );
-
-      // Top N
-      const topN = parseInt(offCount) || 10;
-      const displayed = rows.slice(0, topN);
-
-      // Zone average before/after
-      const zoneRows = offZone === "all" ? offendersCache : offendersCache.filter(r => r.zone === offZone);
-      const avgBefore = zoneRows.length ? (zoneRows.reduce((s, r) => s + (r[kpi.field] || 0), 0) / zoneRows.length) : 0;
-      const remaining = zoneRows.filter(r => !displayed.find(d => d.id === r.id));
-      const avgAfter  = remaining.length ? (remaining.reduce((s, r) => s + (r[kpi.field] || 0), 0) / remaining.length) : 0;
-
-      const fmt = v => kpi.id === "avp" ? v.toFixed(1) + "%" : kpi.id === "breaks" ? v.toFixed(1) + "h" : Math.round(v).toString();
-
-      el.innerHTML =
-        '<div style="padding:20px 4px">' +
-        '<h2 style="font-size:18px;font-weight:800;margin-bottom:16px">🚨 Offenders Analysis</h2>' +
-
-        // Filters row
-        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
-          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label>' +
-          '<select onchange="offZone=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' +
-          zones.map(z => '<option value="' + z + '" ' + (offZone === z ? "selected" : "") + '>' + (z === "all" ? "All Zones" : z) + '</option>').join("") +
-          '</select></div>' +
-
-          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">KPI</label>' +
-          '<select onchange="offKPI=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' +
-          kpis.map(k => '<option value="' + k.id + '" ' + (offKPI === k.id ? "selected" : "") + '>' + k.label + '</option>').join("") +
-          '</select></div>' +
-
-          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">' + (kpi.dir === "high" ? "فوق" : "تحت") + '</label>' +
-          '<input type="number" value="' + offThreshold + '" placeholder="e.g. 5" onchange="offThreshold=this.value;renderOffenders()" ' +
-          'style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:90px;font-family:inherit;color:var(--ink)"></div>' +
-
-          '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">عدد الطيارين</label>' +
-          '<input type="number" value="' + offCount + '" min="1" max="50" onchange="offCount=this.value;renderOffenders()" ' +
-          'style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;width:80px;font-family:inherit;color:var(--ink)"></div>' +
-
-          '<button onclick="offendersLoaded=false;loadOffenders().then(()=>renderOffenders())" ' +
-          'style="font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600;margin-top:18px">🔄 Refresh</button>' +
-        '</div>' +
-
-        // Impact banner
-        (displayed.length > 0 ?
-        '<div style="background:var(--warn-bg,#fff7e6);border:1px solid var(--warn-line,#f5c76a);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--ink)">' +
-        '⚠️ لو اتخدت اكشن على <b>' + displayed.length + '</b> طيار — ' +
-        kpi.label + ' هيتحسن من <b>' + fmt(avgBefore) + '</b> لـ <b>' + fmt(avgAfter) + '</b>' +
-        '</div>' : '') +
-
-        // Table
-        '<div class="panel" style="overflow-x:auto;padding:0">' +
-        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-        '<thead><tr style="border-bottom:2px solid var(--line)">' +
-        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">#</th>' +
-        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">RIDER ID</th>' +
-        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;font-size:11px">ZONE</th>' +
-        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">NO SHOW</th>' +
-        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">LATE >10m</th>' +
-        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">BREAKS (h)</th>' +
-        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">AVP %</th>' +
-        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">WORK DAYS</th>' +
-        '</tr></thead><tbody>' +
-        displayed.map((r, i) => {
-          const highlight = 'background:' + (i % 2 === 0 ? 'var(--flat-bg)' : 'var(--card)');
-          const kpiBad = 'color:var(--bad);font-weight:700';
-          return '<tr style="' + highlight + ';border-bottom:1px solid var(--line)">' +
-            '<td style="padding:9px 14px;color:var(--muted)">' + (i+1) + '</td>' +
-            '<td style="padding:9px 14px;font-weight:700">' + (r.id || "-") + '</td>' +
-            '<td style="padding:9px 14px">' + (r.zone || "-") + '</td>' +
-            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="noshow"?kpiBad:"") + '">' + (r.noshow ?? "-") + '</td>' +
-            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="late"?kpiBad:"") + '">' + (r.late ?? "-") + '</td>' +
-            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="breaks"?kpiBad:"") + '">' + (r.breaks != null ? r.breaks.toFixed(1) : "-") + '</td>' +
-            '<td style="padding:9px 14px;text-align:right;' + (offKPI==="avp"?kpiBad:"") + '">' + (r.avp != null ? r.avp + "%" : "-") + '</td>' +
-            '<td style="padding:9px 14px;text-align:right">' + (r.days ?? "-") + '</td>' +
-            '</tr>';
-        }).join("") +
-        (displayed.length === 0 ? '<tr><td colspan="8" style="padding:30px;text-align:center;color:var(--muted)">No riders match the filter</td></tr>' : '') +
-        '</tbody></table></div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding:0 4px">Showing ' + displayed.length + ' of ' + rows.length + ' riders' + (offZone!=="all"?" in "+offZone:"") + ' • Updated weekly</div>' +
-        '</div>';
+      let content = "";
+      if (offSubTab === "table")   content = offRenderTable();
+      else if (offSubTab === "ai") content = offRenderAI();
+      else if (offSubTab === "zones")   content = offRenderZones();
+      else if (offSubTab === "leaders") content = offRenderLeaders();
+      else if (offSubTab === "repeats") content = offRenderRepeats();
+      else if (offSubTab === "history") content = offRenderHistory();
+      el.innerHTML = '<div style="padding:20px 4px"><h2 style="font-size:18px;font-weight:800;margin-bottom:16px">🚨 Offenders Analysis</h2>' + offSubTabBar() + content + '</div>';
     }
+
     function renderOverview() {
       const ov = document.getElementById('overview');
       let html = '<div class="zmap">';
