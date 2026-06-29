@@ -3687,22 +3687,56 @@
         });
       });
 
-      const exportBtn = '<div style="margin-bottom:12px"><button onclick="offExportSummary()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>';
+      const exportBtn = '<div style="margin-bottom:12px"><button onclick="offShowExportPopup()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>';
       return exportBtn + (html || '<div style="padding:40px;text-align:center;color:var(--muted)">No issues found this week</div>');
     }
+    function offShowExportPopup() {
+      const latest = offLatestRows();
+      const ZONES_WITH_TYPES_E = ["Mohandiseen", "Giza"];
+      const zones = [...new Set(latest.map(r=>r.zone).filter(Boolean))].sort();
+      const overlay = document.getElementById("offExportOverlay");
+      const list = document.getElementById("offExportZoneList");
+      const items = [];
+      zones.forEach(z => {
+        const hasTypes = ZONES_WITH_TYPES_E.some(zn => z.toLowerCase().includes(zn.toLowerCase()))
+          && latest.filter(r=>r.zone===z).some(r => r.type === "Full" || r.type === "Part");
+        if (hasTypes) {
+          items.push({ label: z + " — Full", zone: z, type: "Full" });
+          items.push({ label: z + " — Part", zone: z, type: "Part" });
+        } else {
+          items.push({ label: z, zone: z, type: "" });
+        }
+      });
+      list.innerHTML = items.map((item, i) =>
+        '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" data-zone="' + item.zone + '" data-type="' + item.type + '" checked style="width:15px;height:15px;cursor:pointer"> ' + item.label + '</label>'
+      ).join("");
+      overlay.style.display = "flex";
+    }
+
     function offExportSummary() {
+      const overlay = document.getElementById("offExportOverlay");
+      overlay.style.display = "none";
+      const checked = [...document.querySelectorAll("#offExportZoneList input:checked")].map(cb => ({ zone: cb.dataset.zone, type: cb.dataset.type }));
+      if (!checked.length) return;
       const latest = offLatestRows();
       const kpis = [{id:"noshow",label:"No Show",field:"noshow",dir:"high"},{id:"late",label:"Late",field:"late",dir:"high"},{id:"breaks",label:"Breaks",field:"breaks",dir:"high"},{id:"avp",label:"AVP%",field:"avp",dir:"low"}];
       const rows = [];
-      [...new Set(latest.map(r=>r.zone).filter(Boolean))].sort().forEach(z => {
-        const zr = latest.filter(r=>r.zone===z);
+      checked.forEach(sel => {
+        let gr = latest.filter(r => r.zone === sel.zone);
+        if (sel.type) gr = gr.filter(r => r.type === sel.type);
+        if (!gr.length) return;
+        const usedIds = new Set();
         kpis.forEach(kpi => {
-          [...zr].filter(r=>(r[kpi.field]||0)>0)
+          [...gr].filter(r=>(r[kpi.field]||0)>0 && !usedIds.has(r.id))
             .sort((a,b)=>kpi.dir==="high"?(b[kpi.field]||0)-(a[kpi.field]||0):(a[kpi.field]||0)-(b[kpi.field]||0))
-            .slice(0,10).forEach((r,i) => rows.push([z, kpi.label, i+1, r.id, r[kpi.field]||0]));
+            .slice(0,10).forEach((r,i) => {
+              usedIds.add(r.id);
+              rows.push([sel.zone, sel.type||"All", kpi.label, i+1, r.id, r[kpi.field]||0, (r.actualHrs||0).toFixed(1)]);
+            });
         });
       });
-      offExportCSV("weekly_summary_w" + offLatestWeek() + ".csv", ["Zone","KPI","Rank","Rider ID","Value"], rows);
+      offExportCSV("weekly_summary_w" + offLatestWeek() + ".csv", ["Zone","Type","KPI","Rank","Rider ID","Value","Actual Hrs"], rows);
     }
 
     // ── SUB-TAB: Zone Breakdown ──
@@ -9773,6 +9807,24 @@ Be concise and direct. Format with clear numbered sections.`;
     <div id="nmDate" style="font-size:11px;color:var(--muted);margin-top:10px"></div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px">
       <button onclick="document.getElementById('nmOverlay').style.display='none'" style="font-size:13px;padding:8px 20px;border-radius:10px;border:1.5px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600">Close</button>
+    </div>
+  </div>
+</div>
+<!-- OFFENDERS EXPORT ZONE PICKER -->
+<div id="offExportOverlay" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:360px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">⬇ Export Weekly Summary</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Select zones to include in the CSV</div>
+    <div id="offExportZoneList" style="margin-bottom:16px;max-height:240px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:8px">
+        <button onclick="document.querySelectorAll('#offExportZoneList input').forEach(cb=>cb.checked=true)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer">All</button>
+        <button onclick="document.querySelectorAll('#offExportZoneList input').forEach(cb=>cb.checked=false)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer">None</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('offExportOverlay').style.display='none'" style="font-size:13px;padding:8px 16px;border-radius:10px;border:1.5px solid var(--line);background:var(--flat-bg);color:var(--muted);cursor:pointer;font-weight:600">Cancel</button>
+        <button onclick="offExportSummary()" style="font-size:13px;padding:8px 20px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:700">⬇ Download</button>
+      </div>
     </div>
   </div>
 </div>
