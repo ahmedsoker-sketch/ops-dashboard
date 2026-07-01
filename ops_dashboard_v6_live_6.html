@@ -3550,6 +3550,7 @@
         { id: "zones",     label: "📈 Zone Breakdown" },
         { id: "leaders",   label: "🏆 Leaderboard" },
         { id: "blacklist", label: "🚫 Blacklist" },
+        { id: "outliers",  label: "📡 Outliers" },
       ];
       return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">' +
         tabs.map(t =>
@@ -4047,6 +4048,148 @@
         rows.map(r=>[r.id,r.zone,r.weeks.size,r.noshow,r.late]));
     }
 
+    // ── SUB-TAB: Outliers ──
+    function offGetOutliers() {
+      const latest = offLatestRows();
+      const KPIS = [
+        { id: "noshow", label: "No Show",   dir: "high" },
+        { id: "late",   label: "Late >10m", dir: "high" },
+        { id: "breaks", label: "Breaks",    dir: "high" },
+        { id: "avp",    label: "AVP%",      dir: "low"  },
+      ];
+      const CLUSTERS = {
+        "Mohandiseen Cluster": ["Mohandiseen", "Hadayek el qobba", "Hadayek el ahram"],
+        "October Cluster":     ["October", "Sheikh Zayed", "Wahat"],
+        "Giza Cluster":        ["Giza", "Shobra", "Cairo_city_centre"],
+      };
+
+      const results = {};
+
+      Object.entries(CLUSTERS).forEach(([cluster, zones]) => {
+        const clusterRiders = latest.filter(r => zones.some(z => r.zone && r.zone.toLowerCase().includes(z.toLowerCase())));
+        if (!clusterRiders.length) return;
+
+        const outlierMap = {}; // riderId → { rider, kpis: [] }
+
+        KPIS.forEach(kpi => {
+          const vals = clusterRiders.map(r => r[kpi.id] || 0);
+          const mean = vals.reduce((a,b)=>a+b,0) / vals.length;
+          const variance = vals.reduce((a,b)=>a+(b-mean)**2,0) / vals.length;
+          const std = Math.sqrt(variance);
+          if (std === 0) return; // all same value, no outliers
+
+          clusterRiders.forEach(r => {
+            const v = r[kpi.id] || 0;
+            const sigma = (v - mean) / std;
+            const isOutlier = kpi.dir === "high" ? sigma >= 1.5 : sigma <= -1.5;
+            if (!isOutlier) return;
+            if (!outlierMap[r.id]) outlierMap[r.id] = { rider: r, kpis: [] };
+            outlierMap[r.id].kpis.push({
+              label: kpi.label,
+              value: v,
+              mean: mean,
+              sigma: Math.abs(sigma).toFixed(1),
+              dir: kpi.dir
+            });
+          });
+        });
+
+        const outliers = Object.values(outlierMap)
+          .sort((a,b) => b.kpis.length - a.kpis.length || b.kpis.reduce((s,k)=>s+parseFloat(k.sigma),0) - a.kpis.reduce((s,k)=>s+parseFloat(k.sigma),0));
+
+        if (outliers.length) results[cluster] = outliers;
+      });
+
+      return results;
+    }
+
+    let offOutlierCluster = "all";
+
+    function offRenderOutliers() {
+      const allData = offGetOutliers();
+      const week = offLatestWeek();
+      const clusters = Object.keys(allData);
+
+      // Filter
+      const data = offOutlierCluster === "all" ? allData :
+        Object.fromEntries(Object.entries(allData).filter(([k]) => k === offOutlierCluster));
+
+      // Cluster filter pills
+      const filterBar = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;align-items:center">' +
+        '<span style="font-size:12px;color:var(--muted);font-weight:600">Cluster:</span>' +
+        ['all', ...clusters].map(c =>
+          '<button onclick="offOutlierCluster=\'' + c + '\';renderOffenders()" style="font-size:12px;padding:5px 12px;border-radius:20px;cursor:pointer;font-weight:600;border:1px solid ' +
+          (offOutlierCluster === c ? 'var(--accent);background:var(--accent);color:#fff' : 'var(--line);background:var(--flat-bg);color:var(--muted)') + '">' +
+          (c === 'all' ? 'All Clusters' : c.replace(' Cluster','')) + '</button>'
+        ).join("") +
+        '<button onclick="offExportOutliers()" style="margin-left:auto;font-size:12px;padding:5px 14px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--flat-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button>' +
+        '</div>';
+
+      if (!Object.keys(data).length) {
+        return filterBar + '<div style="padding:40px;text-align:center;color:var(--muted)">No outliers detected this week ✅</div>';
+      }
+
+      let html = filterBar + '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">Riders <b>1.5+ standard deviations</b> from cluster average — Week ' + week + '</div>';
+
+      Object.entries(data).forEach(([cluster, outliers]) => {
+        const crossKPI = outliers.filter(o => o.kpis.length >= 2);
+        const singleKPI = outliers.filter(o => o.kpis.length === 1);
+
+        html += '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px">' +
+          '<div style="font-size:14px;font-weight:800;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)">📍 ' + cluster +
+          ' <span style="font-size:12px;color:var(--muted);font-weight:400">(' + outliers.length + ' outliers)</span>' +
+          (crossKPI.length ? ' <span style="font-size:11px;background:#fff0f0;color:var(--bad);border-radius:6px;padding:2px 8px;font-weight:700;margin-left:6px">⚡ ' + crossKPI.length + ' cross-KPI</span>' : '') +
+          '</div>';
+
+        if (crossKPI.length) {
+          html += '<div style="font-size:11px;font-weight:700;color:var(--bad);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">⚡ Multiple KPI Issues</div>';
+          crossKPI.forEach(o => { html += renderOutlierCard(o, true); });
+        }
+        if (singleKPI.length) {
+          if (crossKPI.length) html += '<div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:.5px">Single KPI</div>';
+          singleKPI.forEach(o => { html += renderOutlierCard(o, false); });
+        }
+        html += '</div>';
+      });
+
+      return html;
+    }
+
+    function offExportOutliers() {
+      const allData = offGetOutliers();
+      const data = offOutlierCluster === "all" ? allData :
+        Object.fromEntries(Object.entries(allData).filter(([k]) => k === offOutlierCluster));
+      const rows = [];
+      Object.entries(data).forEach(([cluster, outliers]) => {
+        outliers.forEach(o => {
+          o.kpis.forEach(k => {
+            rows.push([cluster, o.rider.zone, o.rider.id, k.label,
+              Math.round(k.value), parseFloat(k.mean).toFixed(1), k.sigma,
+              o.kpis.length >= 2 ? "Cross-KPI" : "Single"]);
+          });
+        });
+      });
+      offExportCSV("outliers_w" + offLatestWeek() + ".csv",
+        ["Cluster","Zone","Rider ID","KPI","Value","Cluster Avg","Sigma","Type"], rows);
+    }
+
+    function renderOutlierCard(o, isCross) {
+      const r = o.rider;
+      const kpiTags = o.kpis.map(k =>
+        '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bad-bg);color:var(--bad);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;margin:2px">' +
+        k.label + ': ' + (typeof k.value === 'number' && k.id === 'breaks' ? k.value.toFixed(1) : Math.round(k.value)) +
+        ' <span style="font-size:10px;opacity:.7">(+' + k.sigma + 'σ, avg ' + (typeof k.mean === 'number' ? k.mean.toFixed(1) : k.mean) + ')</span></span>'
+      ).join("");
+
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:' + (isCross ? 'var(--bad-bg)' : 'var(--flat-bg)') + '">' +
+        '<div style="flex-shrink:0">' +
+        '<div style="font-weight:800;font-size:13px;cursor:pointer;color:var(--accent)" onclick="offRiderSearch=String(' + r.id + ');offSubTab=\'history\';renderOffenders()">' + r.id + '</div>' +
+        '<div style="font-size:11px;color:var(--muted)">' + r.zone + '</div>' +
+        '</div>' +
+        '<div style="flex:1;display:flex;flex-wrap:wrap;gap:2px">' + kpiTags + '</div>' +
+        '</div>';
+    }
+
     // ── MAIN RENDER ──
     function renderOffenders() {
       const el = document.getElementById("offendersview");
@@ -4063,6 +4206,7 @@
       else if (offSubTab === "repeats") content = offRenderRepeats();
       else if (offSubTab === "history")   content = offRenderHistory();
       else if (offSubTab === "blacklist") content = offRenderBlacklist();
+      else if (offSubTab === "outliers")  content = offRenderOutliers();
       el.innerHTML = '<div style="padding:20px 4px"><h2 style="font-size:18px;font-weight:800;margin-bottom:16px">🚨 Offenders Analysis</h2>' + offSubTabBar() + content + '</div>';
     }
 
