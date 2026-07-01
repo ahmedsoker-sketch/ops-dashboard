@@ -3547,8 +3547,9 @@
         { id: "ai",      label: "📋 Weekly Summary" },
         { id: "repeats", label: "🔁 Repeat Offenders" },
         { id: "history", label: "📋 Rider History" },
-        { id: "zones",   label: "📈 Zone Breakdown" },
-        { id: "leaders", label: "🏆 Leaderboard" },
+        { id: "zones",     label: "📈 Zone Breakdown" },
+        { id: "leaders",   label: "🏆 Leaderboard" },
+        { id: "blacklist", label: "🚫 Blacklist" },
       ];
       return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">' +
         tabs.map(t =>
@@ -3877,6 +3878,128 @@
       );
     }
 
+    // ── SUB-TAB: Blacklist ──
+    function offGetBlacklist() {
+      const CONSECUTIVE_WEEKS = 5;
+      const weeks = [...new Set(offendersCache.map(r => r.week || 0))].filter(Boolean).sort((a,b) => a-b);
+      if (weeks.length < CONSECUTIVE_WEEKS) return [];
+
+      // For each week, get the top 40 unique riders per zone
+      const weekOffenders = {}; // { week: Set of rider IDs }
+      weeks.forEach(w => {
+        const wRows = offendersCache.filter(r => r.week === w);
+        const zones = [...new Set(wRows.map(r => r.zone).filter(Boolean))];
+        const ids = new Set();
+        zones.forEach(z => {
+          const zr = wRows.filter(r => r.zone === z);
+          const usedIds = new Set();
+          OFF_KPIS.forEach(kpi => {
+            [...zr].filter(r => (r[kpi.field]||0) > 0 && !usedIds.has(r.id))
+              .sort((a,b) => kpi.dir==="high" ? (b[kpi.field]||0)-(a[kpi.field]||0) : (a[kpi.field]||0)-(b[kpi.field]||0))
+              .slice(0,10).forEach(r => { usedIds.add(r.id); ids.add(r.id); });
+          });
+        });
+        weekOffenders[w] = ids;
+      });
+
+      // Find riders who appear in 5+ consecutive weeks
+      const riderWeeks = {}; // { riderId: [weeks they appeared in] }
+      offendersCache.forEach(r => {
+        if (!r.id || !r.week) return;
+        if (weekOffenders[r.week] && weekOffenders[r.week].has(r.id)) {
+          if (!riderWeeks[r.id]) riderWeeks[r.id] = { weeks: [], zone: r.zone };
+          if (!riderWeeks[r.id].weeks.includes(r.week)) riderWeeks[r.id].weeks.push(r.week);
+        }
+      });
+
+      // Check for 5 consecutive weeks
+      const blacklist = [];
+      Object.entries(riderWeeks).forEach(([id, data]) => {
+        const sortedWeeks = data.weeks.sort((a,b) => a-b);
+        let maxConsec = 1, curConsec = 1;
+        for (let i = 1; i < sortedWeeks.length; i++) {
+          if (sortedWeeks[i] === sortedWeeks[i-1] + 1) {
+            curConsec++;
+            maxConsec = Math.max(maxConsec, curConsec);
+          } else {
+            curConsec = 1;
+          }
+        }
+        if (maxConsec >= CONSECUTIVE_WEEKS) {
+          // Get latest week data
+          const latestWeek = Math.max(...sortedWeeks);
+          const latestData = offendersCache.find(r => String(r.id) === String(id) && r.week === latestWeek) || {};
+          blacklist.push({
+            id,
+            zone: data.zone,
+            weeks: sortedWeeks,
+            maxConsec,
+            firstWeek: sortedWeeks[0],
+            latestWeek,
+            noshow: latestData.noshow || 0,
+            late: latestData.late || 0,
+            avp: latestData.avp || 0,
+            actualHrs: latestData.actualHrs || 0
+          });
+        }
+      });
+
+      return blacklist.sort((a,b) => b.maxConsec - a.maxConsec);
+    }
+
+    function offRenderBlacklist() {
+      const blacklist = offGetBlacklist();
+      const weeks = [...new Set(offendersCache.map(r => r.week||0))].filter(Boolean);
+      const CONSECUTIVE_WEEKS = 5;
+
+      if (weeks.length < CONSECUTIVE_WEEKS) {
+        return '<div style="padding:40px;text-align:center;color:var(--muted)">Need at least ' + CONSECUTIVE_WEEKS + ' weeks of data — currently have ' + weeks.length + ' week(s)</div>';
+      }
+
+      if (!blacklist.length) {
+        return '<div style="padding:40px;text-align:center;color:var(--good)">✅ No riders on blacklist — no one appeared in 5 consecutive weeks</div>';
+      }
+
+      const totalHrs = blacklist.reduce((s,r) => s + (r.actualHrs||0), 0);
+
+      return '<div style="background:var(--bad-bg);border:1px solid var(--bad-line);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13px">' +
+        '🚫 <b>' + blacklist.length + ' riders</b> appeared in the top 40 offenders for 5+ consecutive weeks — ' +
+        'Total hours at risk: <b>' + Math.round(totalHrs) + 'h/week</b> · <b>' + Math.round(totalHrs/7) + 'h/day</b>' +
+        '</div>' +
+        '<div style="margin-bottom:10px"><button onclick="offExportBlacklist()" style="font-size:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--bad);color:var(--bad);background:var(--bad-bg);cursor:pointer;font-weight:600">⬇ Export CSV</button></div>' +
+        '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">#</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">RIDER ID</th>' +
+        '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">ZONE</th>' +
+        '<th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;font-weight:700">CONSEC. WEEKS</th>' +
+        '<th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;font-weight:700">WEEKS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">LAST NO SHOW</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">LAST LATE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">LAST AVP%</th>' +
+        '</tr></thead><tbody>' +
+        blacklist.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
+          '<td style="padding:9px 14px;color:var(--muted)">'+(i+1)+'</td>' +
+          '<td style="padding:9px 14px;font-weight:700;cursor:pointer;color:var(--bad)" onclick="offRiderSearch=String(r.id);offSubTab=\'history\';renderOffenders()">'+r.id+'</td>' +
+          '<td style="padding:9px 14px">'+r.zone+'</td>' +
+          '<td style="padding:9px 14px;text-align:center"><span style="background:var(--bad-bg);color:var(--bad);font-weight:700;padding:2px 10px;border-radius:20px;font-size:12px">'+r.maxConsec+' weeks</span></td>' +
+          '<td style="padding:9px 14px;text-align:center;font-size:12px;color:var(--muted)">W'+r.weeks.join(', W')+'</td>' +
+          '<td style="padding:9px 14px;text-align:right;color:var(--bad);font-weight:700">'+r.noshow+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.late+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+offFmt(r.avp,"avp")+'</td>' +
+          '</tr>'
+        ).join("") +
+        '</tbody></table></div>';
+    }
+
+    function offExportBlacklist() {
+      const blacklist = offGetBlacklist();
+      offExportCSV("blacklist.csv",
+        ["#","Rider ID","Zone","Consecutive Weeks","All Weeks","Last No Show","Last Late","Last AVP%","Actual Hrs/Week"],
+        blacklist.map((r,i) => [i+1, r.id, r.zone, r.maxConsec, 'W'+r.weeks.join(' W'), r.noshow, r.late, r.avp, (r.actualHrs||0).toFixed(1)])
+      );
+    }
+
     // ── CSV Export helper ──
     function offExportCSV(filename, headers, rows) {
       const csv = [headers.join(","), ...rows.map(r => r.map(v => '"' + String(v||"").replace(/"/g,'""') + '"').join(","))].join("\n");
@@ -3938,7 +4061,8 @@
       else if (offSubTab === "zones")   content = offRenderZones();
       else if (offSubTab === "leaders") content = offRenderLeaders();
       else if (offSubTab === "repeats") content = offRenderRepeats();
-      else if (offSubTab === "history") content = offRenderHistory();
+      else if (offSubTab === "history")   content = offRenderHistory();
+      else if (offSubTab === "blacklist") content = offRenderBlacklist();
       el.innerHTML = '<div style="padding:20px 4px"><h2 style="font-size:18px;font-weight:800;margin-bottom:16px">🚨 Offenders Analysis</h2>' + offSubTabBar() + content + '</div>';
     }
 
@@ -6062,7 +6186,22 @@ Be concise and direct. Format with clear numbered sections.`;
         if (!retrying) return loadTasks(true); // one retry on network failure
       }
     }
+    let saveTasksInFlight = null; // Promise — serializes concurrent saveTasks() calls so two
+                                   // near-simultaneous saves (e.g. fast double clicks across
+                                   // different buttons) can't race and duplicate rows.
     async function saveTasks() {
+      if (saveTasksInFlight) {
+        await saveTasksInFlight; // wait for the in-progress save to finish first
+      }
+      const runner = saveTasksInner();
+      saveTasksInFlight = runner;
+      try {
+        return await runner;
+      } finally {
+        if (saveTasksInFlight === runner) saveTasksInFlight = null;
+      }
+    }
+    async function saveTasksInner() {
       // Guard: never push tasksCache to the sheet until we've successfully loaded
       // it at least once. Without this, a failed/late loadTasks() leaves
       // tasksCache=[] and the very next add/done/delete would overwrite the whole
@@ -6339,7 +6478,7 @@ Be concise and direct. Format with clear numbered sections.`;
         </div>
       </div>
       <div style="display:flex;gap:8px">
-        <button onclick="addTask()" style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 20px;border-radius:10px;cursor:pointer;background:var(--accent);color:#fff;border:none">Save Task</button>
+        <button id="nt-submit-btn" onclick="addTask()" style="font-family:inherit;font-size:13px;font-weight:700;padding:9px 20px;border-radius:10px;cursor:pointer;background:var(--accent);color:#fff;border:none">Save Task</button>
         <button onclick="showAddTask=false;renderTasks()" style="font-family:inherit;font-size:13px;padding:9px 16px;border-radius:10px;cursor:pointer;background:var(--flat-bg);color:var(--flat);border:1px solid var(--line)">Cancel</button>
       </div>
     </div>` : "";
@@ -6396,7 +6535,9 @@ Be concise and direct. Format with clear numbered sections.`;
       }
       renderTasks();
     }
+    let addTaskInFlight = false;
     async function addTask() {
+      if (addTaskInFlight) return; // prevent double-submit (double-click, slow network, etc.)
       if (!tasksLoadedOK) {
         alert("⏳ Tasks are still loading from the sheet — please wait a moment and try again.");
         return;
@@ -6406,6 +6547,10 @@ Be concise and direct. Format with clear numbered sections.`;
         alert("Task name is required!");
         return;
       }
+      addTaskInFlight = true;
+      const addBtn = document.getElementById("nt-submit-btn");
+      if (addBtn) { addBtn.disabled = true; addBtn.style.opacity = "0.6"; addBtn.style.cursor = "not-allowed"; }
+      try {
       const owner = document.getElementById("nt-owner")?.value || "";
       const task = {
         id: "t" + Date.now(),
@@ -6430,6 +6575,11 @@ Be concise and direct. Format with clear numbered sections.`;
       if (owner) sendTaskEmailNotification(task);
       showAddTask = false;
       renderTasks();
+      } finally {
+        addTaskInFlight = false;
+        const btn = document.getElementById("nt-submit-btn");
+        if (btn) { btn.disabled = false; btn.style.opacity = ""; btn.style.cursor = ""; }
+      }
     }
     function toggleTaskDone(id) {
       const t = tasksCache.find(t => t.id === id);
@@ -6718,7 +6868,39 @@ Be concise and direct. Format with clear numbered sections.`;
       return out;
     }
 
+    // Keys that should be SUMmed across days (not averaged)
+    const SUM_KEYS = new Set(["orders", "working_hours", "active_riders"]);
+
+    function getMixedVals(rows) {
+      const keys = {};
+      rows.forEach(r => {
+        Object.entries(r.vals || {}).forEach(([k, v]) => {
+          if (v != null) {
+            if (!keys[k]) keys[k] = [];
+            keys[k].push(v);
+          }
+        });
+      });
+      const out = {};
+      Object.entries(keys).forEach(([k, arr]) => {
+        out[k] = SUM_KEYS.has(k)
+          ? arr.reduce((a, b) => a + b, 0)           // SUM
+          : arr.reduce((a, b) => a + b, 0) / arr.length; // AVG
+      });
+      return out;
+    }
+
     function renderTargets() {
+      // Ensure week/month defaults are set BEFORE renderHeaderKpis() runs,
+      // otherwise the header renders with targetsWeekSel/MonthSel still null
+      // on the very first switch to Week/Month mode and shows all zeros.
+      const allRowsForDefaults = Object.values(sheetCache).flat();
+      const weekNumsForDefaults = [...new Set(allRowsForDefaults.map(r => getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a, b) => b - a);
+      const monthNumsForDefaults = [...new Set(allRowsForDefaults.map(r => getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a, b) => b - a);
+      if (!targetsWeekSel && weekNumsForDefaults.length) targetsWeekSel = weekNumsForDefaults[0];
+      if (!targetsMonthSel && monthNumsForDefaults.length) targetsMonthSel = monthNumsForDefaults[0];
+
+      renderHeaderKpis();
       const tv = document.getElementById("targetview");
       const today = state.labels.today || "";
       const fmtVal = (v, fmt) => {
@@ -6817,11 +6999,11 @@ Be concise and direct. Format with clear numbered sections.`;
         } else if (targetsViewMode === "week") {
           const wRows = rows.filter(r => getWkFromISO(getISOFromRow(r)) === targetsWeekSel);
           if (!wRows.length) return;
-          v = getAvgVals(wRows);
+          v = getMixedVals(wRows);
         } else {
           const mRows = rows.filter(r => getMoFromISO(getISOFromRow(r)) === targetsMonthSel);
           if (!mRows.length) return;
-          v = getAvgVals(mRows);
+          v = getMixedVals(mRows);
         }
         // Calculate score
         let scored = 0,
@@ -7638,11 +7820,11 @@ Be concise and direct. Format with clear numbered sections.`;
         } else if (gapMode === "week") {
           const wRows = zrows.filter(r => getWkFromISO(getISOFromRow(r)) === gapWeek);
           if (!wRows.length) return;
-          v = getAvgVals(wRows);
+          v = getMixedVals(wRows);
         } else {
           const mRows = zrows.filter(r => getMoFromISO(getISOFromRow(r)) === gapMonth);
           if (!mRows.length) return;
-          v = getAvgVals(mRows);
+          v = getMixedVals(mRows);
         }
         let scored = 0,
           total = 0;
@@ -7858,11 +8040,11 @@ Be concise and direct. Format with clear numbered sections.`;
         } else if (anomalyMode === "week") {
           const wRows = zrows.filter(r => getWkFromISO(getISOFromRow(r)) === anomalyWeek);
           if (!wRows.length) return;
-          curVals = getAvgVals(wRows);
+          curVals = getMixedVals(wRows);
         } else {
           const mRows = zrows.filter(r => getMoFromISO(getISOFromRow(r)) === anomalyMonth);
           if (!mRows.length) return;
-          curVals = getAvgVals(mRows);
+          curVals = getMixedVals(mRows);
         }
         // Historical = everything outside selected period
         const histRows = anomalyMode === "day" ?
@@ -9070,36 +9252,70 @@ Be concise and direct. Format with clear numbered sections.`;
     function renderHeaderKpis() {
       const el = document.getElementById("headerKpis");
       if (!el) return;
+
+      // Ensure week/month selection has a sane default before we use it below —
+      // otherwise the first time mode switches to "week"/"month" (from anywhere,
+      // not just the Targets tab), targetsWeekSel/MonthSel can still be null and
+      // every zone gets filtered out, making the header show all zeros.
+      const mode0 = typeof targetsViewMode !== "undefined" ? targetsViewMode : "day";
+      if ((mode0 === "week" && !targetsWeekSel) || (mode0 === "month" && !targetsMonthSel)) {
+        const allRowsForDefaults = Object.values(sheetCache).flat();
+        if (mode0 === "week" && !targetsWeekSel) {
+          const weekNumsForDefaults = [...new Set(allRowsForDefaults.map(r => getWkFromISO(getISOFromRow(r))).filter(Boolean))].sort((a, b) => b - a);
+          if (weekNumsForDefaults.length) targetsWeekSel = weekNumsForDefaults[0];
+        }
+        if (mode0 === "month" && !targetsMonthSel) {
+          const monthNumsForDefaults = [...new Set(allRowsForDefaults.map(r => getMoFromISO(getISOFromRow(r))).filter(Boolean))].sort((a, b) => b - a);
+          if (monthNumsForDefaults.length) targetsMonthSel = monthNumsForDefaults[0];
+        }
+      }
+
       let totalOrders = 0,
         totalRiders = 0,
         totalWH = 0,
         sumOnTime = 0,
         nOnTime = 0,
         prevOrders = 0;
+
+      const mode = typeof targetsViewMode !== "undefined" ? targetsViewMode : "day";
+
       ZONES.forEach(function(z) {
-        const hasData = META.some(m => {
-          const r = evalMetric(z.id, m);
-          return (r.t != null && r.t > 0) || (r.p != null && r.p > 0);
-        });
-        if (!hasData) return;
-        const o0 = val(z.id, "orders", 0),
-          o1 = val(z.id, "orders", 1);
-        const ar = val(z.id, "active_riders", 0),
-          wh = val(z.id, "working_hours", 0);
-        const ot = val(z.id, "on_time", 0);
+        const rows = sheetCache[z.id] || [];
+        let v = {};
+
+        if (mode === "day") {
+          const today = state.labels.today || "";
+          const row = rows.find(r => r.date === today);
+          if (!row) return;
+          v = row.vals || {};
+        } else if (mode === "week") {
+          const wRows = rows.filter(r => getWkFromISO(getISOFromRow(r)) === targetsWeekSel);
+          if (!wRows.length) return;
+          v = getMixedVals(wRows);
+        } else {
+          const mRows = rows.filter(r => getMoFromISO(getISOFromRow(r)) === targetsMonthSel);
+          if (!mRows.length) return;
+          v = getMixedVals(mRows);
+        }
+
+        const o0 = v["orders"],
+              o1 = mode === "day" ? val(z.id, "orders", 1) : null;
+        const ar = v["active_riders"],
+              wh = v["working_hours"];
+        const ot = v["on_time"];
+
         if (o0 != null) totalOrders += o0;
         if (o1 != null) prevOrders += o1;
-        if (ar != null) totalRiders += ar;
+        if (ar != null) totalRiders += (SUM_KEYS.has("active_riders") && mode !== "day" ? ar : ar);
         if (wh != null) totalWH += wh;
-        if (ot != null && ot > 0) {
-          sumOnTime += ot;
-          nOnTime++;
-        }
+        if (ot != null && ot > 0) { sumOnTime += ot; nOnTime++; }
       });
+
       const avgOnTime = nOnTime > 0 ? (sumOnTime / nOnTime) : 0;
       const ordersDelta = prevOrders > 0 ? (((totalOrders - prevOrders) / prevOrders) * 100) : 0;
       const deltaCls = ordersDelta >= 0 ? "up" : "down";
       const deltaArrow = ordersDelta >= 0 ? "▲" : "▼";
+      const modeLabel = mode === "week" ? " (Week " + targetsWeekSel + ")" : mode === "month" ? " (Month " + targetsMonthSel + ")" : "";
       el.innerHTML =
         '<div class="hk-item" data-count="' + Math.round(totalOrders) + '">' +
         '<span class="hk-label">Total Orders</span>' +
@@ -9355,6 +9571,7 @@ Be concise and direct. Format with clear numbered sections.`;
     let viewMode = "day"; // "day" | "week" | "month"
     function setViewMode(mode) {
       viewMode = mode;
+      targetsViewMode = mode; // keep header KPIs in sync with the global mode
       ["day", "week", "month"].forEach(m => {
         const btn = document.getElementById("v" + m.charAt(0).toUpperCase() + m.slice(1));
         if (btn) btn.classList.toggle("active", m === mode);
@@ -9366,16 +9583,28 @@ Be concise and direct. Format with clear numbered sections.`;
       if (mode === "month") populateMonthDropdowns();
       applyViewModeToState();
       render();
+      renderHeaderKpis(); // update the header strip totals for the new mode
     }
 
     function getISOFromRow(r) {
       return r.isoDate || r.date;
     }
 
+    function parseAnyDate(isoStr) {
+      if (!isoStr) return null;
+      const s = String(isoStr).trim();
+      // Try strict ISO first (fast path)
+      const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return new Date(parseInt(iso[1]), parseInt(iso[2]) - 1, parseInt(iso[3]));
+      // Fall back to native Date parsing — handles "Mon Jun 01 2026 00:00:00 GMT+0300 (...)"
+      // and other formats the Sheet might send as raw cell text.
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    }
+
     function getWkFromISO(isoStr) {
-      const m = isoStr.match(/(\d{4})-(\d{2})-(\d{2})/);
-      if (!m) return null;
-      const d = new Date(m[1], m[2] - 1, m[3]);
+      const d = parseAnyDate(isoStr);
+      if (!d) return null;
       // Week starts Monday: shift so Monday=0
       const day = (d.getDay() + 6) % 7; // Mon=0, Tue=1, ... Sun=6
       const monday = new Date(d);
@@ -9388,8 +9617,8 @@ Be concise and direct. Format with clear numbered sections.`;
     }
 
     function getMoFromISO(isoStr) {
-      const m = isoStr.match(/(\d{4})-(\d{2})/);
-      return m ? parseInt(m[2]) : null;
+      const d = parseAnyDate(isoStr);
+      return d ? (d.getMonth() + 1) : null;
     }
 
     function populateWeekDropdowns() {
@@ -9431,12 +9660,18 @@ Be concise and direct. Format with clear numbered sections.`;
 
     function onWeekPick() {
       applyViewModeToState();
+      const sel = document.getElementById("pickWeek1");
+      if (sel) targetsWeekSel = parseInt(sel.value) || targetsWeekSel;
       render();
+      renderHeaderKpis();
     }
 
     function onMonthPick() {
       applyViewModeToState();
+      const sel = document.getElementById("pickMonth1");
+      if (sel) targetsMonthSel = parseInt(sel.value) || targetsMonthSel;
       render();
+      renderHeaderKpis();
     }
     /* compute average of an array of numbers, ignoring nulls */
     function avgVals(arr) {
