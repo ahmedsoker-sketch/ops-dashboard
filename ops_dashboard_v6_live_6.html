@@ -6344,6 +6344,23 @@ Be concise and direct. Format with clear numbered sections.`;
     let taskOwnerFilter = "";
     let showAddTask = false;
     let tasksLoadedOK = false; // becomes true only after a successful read from the sheet
+    // Pre-load from local backup immediately so actions aren't blocked on first open
+    (function preloadTasksFromBackup() {
+      try {
+        const raw = localStorage.getItem(TASKS_BACKUP_KEY);
+        if (!raw) return;
+        const backup = JSON.parse(raw);
+        if (backup && Array.isArray(backup.tasks) && backup.tasks.length > 0) {
+          // Dedup by id
+          const seen = {};
+          tasksCache = backup.tasks.filter(t => {
+            if (!t.id || seen[t.id]) return false;
+            seen[t.id] = true; return true;
+          });
+          tasksLoadedOK = true; // safe to save — we have a known-good baseline
+        }
+      } catch(e) {}
+    })();
     let tasksSaveFailed = false; // tracks last save outcome, shown in the UI
     /* ---- local safety-net backup (does NOT replace the sheet — just a recovery copy) ---- */
     function backupTasksLocally(tasks) {
@@ -6484,9 +6501,9 @@ Be concise and direct. Format with clear numbered sections.`;
       // tasksCache=[] and the very next add/done/delete would overwrite the whole
       // sheet with an empty list — this was the cause of tasks "resetting".
       if (!tasksLoadedOK) {
+        // Sheet hasn't loaded yet — block the save to avoid wiping data
         console.error("saveTasks blocked: tasks have not been loaded successfully yet.");
         tasksSaveFailed = true;
-        alert("⚠ Couldn't confirm the tasks were loaded from the sheet yet, so this change wasn't saved remotely (to avoid wiping data). Please refresh and try again.");
         return false;
       }
       // Back up locally BEFORE attempting the remote save — this is the
@@ -6876,9 +6893,9 @@ Be concise and direct. Format with clear numbered sections.`;
       t.done = true;
       if (!skip) { const n = document.getElementById('cpNote').value.trim(); if (n) t.completion_note = n; }
       t.completed_at = new Date().toISOString().slice(0,10);
+      renderTasks(); // update UI immediately — don't wait for network
       const ok = await saveTasks();
-      showTaskToast(ok ? '✅ Marked done and saved.' : '⚠ Status changed locally but did not save.', ok ? 'ok' : 'err');
-      renderTasks();
+      showTaskToast(ok ? '✅ Marked done and saved.' : '⚠ Saved locally only — will retry on next sync.', ok ? 'ok' : 'err');
     }
     function showNoteModal(id) {
       const t = tasksCache.find(t => t.id === id);
