@@ -6344,20 +6344,21 @@ Be concise and direct. Format with clear numbered sections.`;
     let taskOwnerFilter = "";
     let showAddTask = false;
     let tasksLoadedOK = false; // becomes true only after a successful read from the sheet
-    // Pre-load from local backup immediately so actions aren't blocked on first open
+    let tasksFromBackupOnly = false; // true = cache loaded from local backup, not yet confirmed by sheet
+    // Pre-load from local backup for instant UI — but don't allow saves until sheet confirms
     (function preloadTasksFromBackup() {
       try {
         const raw = localStorage.getItem(TASKS_BACKUP_KEY);
         if (!raw) return;
         const backup = JSON.parse(raw);
         if (backup && Array.isArray(backup.tasks) && backup.tasks.length > 0) {
-          // Dedup by id
           const seen = {};
           tasksCache = backup.tasks.filter(t => {
             if (!t.id || seen[t.id]) return false;
             seen[t.id] = true; return true;
           });
-          tasksLoadedOK = true; // safe to save — we have a known-good baseline
+          tasksFromBackupOnly = true;
+          // tasksLoadedOK stays false until sheet confirms — prevents saving stale backup
         }
       } catch(e) {}
     })();
@@ -6471,6 +6472,22 @@ Be concise and direct. Format with clear numbered sections.`;
           idSeen[t.id] = true;
           return true;
         });
+        // Merge: if we had backup data with local changes (e.g. done=true), preserve them
+        // but sheet is the source of truth for the full list
+        if (tasksFromBackupOnly && tasksCache.length > 0) {
+          const localMap = {};
+          tasksCache.forEach(t => { if (t.id) localMap[t.id] = t; });
+          // Apply any local-only changes (done status, completion_note) onto sheet data
+          dedupedParsed.forEach(t => {
+            const local = localMap[t.id];
+            if (local && local.done && !t.done) {
+              t.done = local.done;
+              t.completed_at = local.completed_at || t.completed_at;
+              t.completion_note = local.completion_note || t.completion_note;
+            }
+          });
+        }
+        tasksFromBackupOnly = false;
         tasksCache = dedupedParsed;
         tasksLoadedOK = true; // only now are we allowed to overwrite the sheet on save
         if (dedupedParsed.length > 0) backupTasksLocally(dedupedParsed); // refresh the safety-net copy
@@ -6501,10 +6518,19 @@ Be concise and direct. Format with clear numbered sections.`;
       // tasksCache=[] and the very next add/done/delete would overwrite the whole
       // sheet with an empty list — this was the cause of tasks "resetting".
       if (!tasksLoadedOK) {
-        // Sheet hasn't loaded yet — block the save to avoid wiping data
-        console.error("saveTasks blocked: tasks have not been loaded successfully yet.");
-        tasksSaveFailed = true;
-        return false;
+        // Sheet hasn't confirmed yet — wait up to 8s for loadTasks to finish
+        // This only happens on first open if user acts before sheet responds
+        let waited = 0;
+        while (!tasksLoadedOK && waited < 8000) {
+          await new Promise(res => setTimeout(res, 300));
+          waited += 300;
+        }
+        if (!tasksLoadedOK) {
+          console.error("saveTasks blocked: sheet did not respond in time.");
+          tasksSaveFailed = true;
+          showTaskToast("⚠ الشيت لسه بيتحمّل — استنى ثانية وحاول تاني.", "err");
+          return false;
+        }
       }
       // Back up locally BEFORE attempting the remote save — this is the
       // recovery copy if the remote write fails halfway or wipes the sheet.
