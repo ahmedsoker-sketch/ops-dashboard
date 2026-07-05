@@ -5455,14 +5455,14 @@
     </div>
     ${addForm}
     <div class="panel" style="padding:14px 14px 4px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div></div>
+        <select onchange="commitTplFilter=this.value;renderFollowUps()" style="font-size:12px;padding:6px 14px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;background:var(--card);color:var(--text);cursor:pointer;min-width:130px;font-weight:600">
+          <option value="all" ${commitTplFilter==="all"?"selected":""}>All 3PLs</option>
+          ${[...new Set(followUpsCache.map(f=>f.threePl))].filter(Boolean).sort().map(n=>`<option value="${escapeAttr(n)}" ${commitTplFilter===n?"selected":""}>${escapeAttr(n)}</option>`).join("")}
+        </select>
+      </div>
       ${renderAreaFilterPills(commitZoneMulti, commitExpandedClusters, "toggleCommitAreaFilter")}
-    </div>
-    <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-      <span style="font-size:12px;color:var(--muted);font-weight:600">Filter by 3PL:</span>
-      <select onchange="commitTplFilter=this.value;renderFollowUps()" style="font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">
-        <option value="all" ${commitTplFilter==="all"?"selected":""}>All 3PLs</option>
-        ${[...new Set(followUpsCache.map(f=>f.threePl))].filter(Boolean).sort().map(n=>`<option value="${escapeAttr(n)}" ${commitTplFilter===n?"selected":""}>${escapeAttr(n)}</option>`).join("")}
-      </select>
     </div>
     <div class="panel">
       ${totalCommits===0
