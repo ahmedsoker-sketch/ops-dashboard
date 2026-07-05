@@ -2638,6 +2638,18 @@
         better: "low",
         fmt: "pct"
       },
+      {
+        k: "avg_wh",
+        ar: "Avg Working Hours",
+        better: "high",
+        fmt: "d1"
+      },
+      {
+        k: "fill_rate",
+        ar: "Fill Rate",
+        better: "high",
+        fmt: "pct"
+      },
     ];
     /* ---------- real data [today=Jun 13, prev=Jun 12] ---------- */
     const ZONES = [{
@@ -4266,6 +4278,93 @@
       html += '</div>';
       ov.innerHTML = html;
     }
+    let zoneViewMode = 'overview'; // 'overview' | 'trend'
+
+    function renderZoneTrend(zid) {
+      const rows = sheetCache[zid] || [];
+      // Get last 7 days with data, sorted oldest→newest
+      const days = [...new Set(rows.map(r => r.date))].filter(Boolean)
+        .sort((a, b) => new Date(a) - new Date(b))
+        .slice(-7);
+
+      if (days.length === 0) return '<div style="padding:30px;text-align:center;color:var(--muted)">No trend data available</div>';
+
+      // Use same META definitions as Overview — no separate format definitions needed
+      const TREND_METRICS = META;
+
+      const fmtV = (v, f) => fmt(v, f); // reuse the same fmt() as Overview
+
+      // Build table: rows = metrics, cols = days
+      const dayHeaders = days.map(d => {
+        const dt = new Date(d);
+        return (dt.getMonth()+1) + "/" + dt.getDate();
+      });
+
+      let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<thead><tr style="border-bottom:2px solid var(--line)">' +
+        '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-weight:700;font-size:11px;min-width:130px">METRIC</th>' +
+        dayHeaders.map((d, i) => '<th style="padding:8px 6px;text-align:right;color:var(--muted);font-weight:700;font-size:11px' + (i === dayHeaders.length-1 ? ';color:var(--ink)' : '') + '">' + d + '</th>').join("") +
+        '<th style="padding:8px 6px;text-align:right;color:var(--muted);font-weight:700;font-size:11px">TREND</th>' +
+        '</tr></thead><tbody>';
+
+      TREND_METRICS.forEach((m, mi) => {
+        const vals = days.map(d => {
+          const row = rows.find(r => r.date === d);
+          return row && row.vals ? row.vals[m.k] : null;
+        });
+
+        // Skip if no data at all for this metric
+        if (vals.every(v => v == null)) return;
+
+        // Sparkline SVG
+        const nums = vals.filter(v => v != null);
+        let spark = '';
+        if (nums.length >= 2) {
+          const min = Math.min(...nums);
+          const max = Math.max(...nums);
+          const range = max - min || 1;
+          const W = 60, H = 20;
+          const pts = vals.map((v, i) => {
+            const x = (i / (vals.length - 1)) * W;
+            const y = v != null ? H - ((v - min) / range) * H : null;
+            return y != null ? x.toFixed(1) + ',' + y.toFixed(1) : null;
+          }).filter(Boolean).join(' ');
+          const lastVal = vals[vals.length - 1];
+          const firstVal = nums[0];
+          const trendUp = lastVal != null && lastVal > firstVal;
+          const trendDown = lastVal != null && lastVal < firstVal;
+          const color = m.better === 'high'
+            ? (trendUp ? 'var(--good)' : trendDown ? 'var(--bad)' : 'var(--muted)')
+            : (trendDown ? 'var(--good)' : trendUp ? 'var(--bad)' : 'var(--muted)');
+          spark = '<svg width="' + W + '" height="' + (H+4) + '" style="overflow:visible">' +
+            '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+            '</svg>';
+        }
+
+        // Color last value based on trend
+        const lastV = vals[vals.length - 1];
+        const prevV = vals.length >= 2 ? vals[vals.length - 2] : null;
+        const lastColor = lastV != null && prevV != null
+          ? (m.better === 'high'
+            ? (lastV > prevV ? 'color:var(--good)' : lastV < prevV ? 'color:var(--bad)' : '')
+            : (lastV < prevV ? 'color:var(--good)' : lastV > prevV ? 'color:var(--bad)' : ''))
+          : '';
+
+        html += '<tr style="border-bottom:1px solid var(--line);background:' + (mi%2===0?'var(--flat-bg)':'var(--card)') + '">' +
+          '<td style="padding:8px 10px;font-weight:600;font-size:12px">' + (m.ar || m.label || m.k) + '</td>' +
+          vals.map((v, i) => {
+            const isLast = i === vals.length - 1;
+            const style = isLast ? 'font-weight:700;' + lastColor : 'color:var(--muted)';
+            return '<td style="padding:8px 6px;text-align:right;' + style + '">' + fmtV(v, m.fmt) + '</td>';
+          }).join("") +
+          '<td style="padding:8px 6px;text-align:right">' + spark + '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      return html;
+    }
+
     /* ---------- render: zone detail ---------- */
     function renderZone(zid) {
       const z = ZONES.find(x => x.id === zid);
@@ -4317,8 +4416,14 @@
         '</div>' +
         '<div class="panel">' +
         '<div class="ptitle"><h2>' + z.name + '</h2><span class="chip ' + v.cls + '">' + v.txt + '</span></div>' +
+        // Zone sub-tabs
+        '<div style="display:flex;gap:6px;margin-bottom:14px">' +
+        '<button onclick="zoneViewMode=\'overview\';renderZone(\'' + zid + '\')" style="font-size:12px;padding:5px 14px;border-radius:20px;cursor:pointer;font-weight:600;border:1px solid ' + (zoneViewMode!=='trend'?'var(--accent);background:var(--accent);color:#fff':'var(--line);background:var(--flat-bg);color:var(--muted)') + '">📊 Overview</button>' +
+        '<button onclick="zoneViewMode=\'trend\';renderZone(\'' + zid + '\')" style="font-size:12px;padding:5px 14px;border-radius:20px;cursor:pointer;font-weight:600;border:1px solid ' + (zoneViewMode==='trend'?'var(--accent);background:var(--accent);color:#fff':'var(--line);background:var(--flat-bg);color:var(--muted)') + '">📈 7-Day Trend</button>' +
+        '</div>' +
+        (zoneViewMode === 'trend' ? renderZoneTrend(zid) :
         '<table><thead><tr><th>Metric</th><th>Main: ' + (state.labels.today || '—') + '</th><th>Compare: ' + (state.labels.prev || '—') + '</th><th>Change</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table>' +
+        '<tbody>' + rows + '</tbody></table>') +
         '</div>';
     }
 
@@ -8452,8 +8557,10 @@ Be concise and direct. Format with clear numbered sections.`;
       const t = (h || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/^[#%]\s*/, "");
       // Orders
       if (/orders completed|# orders|^orders$/.test(t)) return "orders";
-      // Working Hours
-      if (/^wh$|^# working hours|^working hours|^actual working hours|^avg wh/.test(t)) return "working_hours";
+      // Avg Working Hours per rider (must come BEFORE working_hours check)
+      if (/^avg wh$|^avg working hours$|^average working hours$/.test(t)) return "avg_wh";
+      // Working Hours (total)
+      if (/^wh$|^# working hours|^working hours|^actual working hours/.test(t)) return "working_hours";
       // Active Riders
       if (/active rider|total active rider/.test(t)) return "active_riders";
       // UTR
@@ -8472,6 +8579,10 @@ Be concise and direct. Format with clear numbered sections.`;
       if (/no.?show/.test(t)) return "no_show";
       // Break Hours
       if (/break/.test(t)) return "break_hours";
+      // Avg Working Hours per rider
+      if (/avg wh|avg working hours|average working hours/.test(t)) return "avg_wh";
+      // Fill Rate
+      if (/fill rate|fill%/.test(t)) return "fill_rate";
       return null;
     }
     /* detect date column — supports "Date", "Report Date", "report date", etc. */
