@@ -3180,7 +3180,12 @@
         const trimmed = {};
         for (const zid in sheetCache) {
           const rows = sheetCache[zid];
-          if (rows && rows.length) trimmed[zid] = rows.slice(-14);
+          if (!rows || !rows.length) continue;
+          // DEDUP: keep only the latest row per date before saving
+          const seen = {};
+          rows.forEach(r => { seen[r.date] = r; }); // last write wins per date
+          const deduped = Object.values(seen).sort((a, b) => dateSort(a.date) - dateSort(b.date));
+          trimmed[zid] = deduped.slice(-14); // keep latest 14 unique dates
         }
         localStorage.setItem(CACHE_KEY, JSON.stringify(trimmed));
       } catch (e) {
@@ -3190,11 +3195,28 @@
       }
     }
 
+    // Safely merge new rows into sheetCache for a zone — deduplicates by date, new data wins
+    function mergeIntoCache(zid, newRows) {
+      const existing = sheetCache[zid] || [];
+      const map = {};
+      existing.forEach(r => { map[r.date] = r; });
+      newRows.forEach(r => { map[r.date] = r; }); // new data overrides old for same date
+      sheetCache[zid] = Object.values(map).sort((a, b) => dateSort(a.date) - dateSort(b.date));
+    }
+
     function loadSheetCache() {
       try {
         const raw = localStorage.getItem(CACHE_KEY);
         if (raw) {
-          sheetCache = JSON.parse(raw);
+          const parsed = JSON.parse(raw);
+          // Deduplicate on load — fixes any corruption from older versions
+          for (const zid in parsed) {
+            const rows = parsed[zid] || [];
+            const seen = {};
+            rows.forEach(r => { seen[r.date] = r; });
+            parsed[zid] = Object.values(seen).sort((a, b) => dateSort(a.date) - dateSort(b.date));
+          }
+          sheetCache = parsed;
         }
       } catch (e) {}
     }
@@ -3247,26 +3269,20 @@
     /* ---------- date dropdowns ---------- */
     /* seed sheetCache from the hardcoded ZONES data so dropdowns always have something */
     function seedCacheFromHardcoded() {
-      // We only seed the DATE LABELS here (so the Day/Week/Month dropdowns are
-      // never empty on first load) — we deliberately do NOT seed any numeric
-      // values. Those old hardcoded numbers in ZONES.data are sample/placeholder
-      // data from when this dashboard was first built, not real numbers for any
-      // particular day. If we seeded them, picking a date/week/month that
-      // happens to land on these placeholder rows would silently average in
-      // fake numbers as if they were real synced data.
+      // We only seed placeholder DATE LABELS so dropdowns are never empty on first load.
+      // We do NOT seed numeric values — the hardcoded ZONES.data numbers are sample data.
       const d0 = "Jun 13",
         d1 = "Jun 12";
       ZONES.forEach(z => {
-        if (sheetCache[z.id] && sheetCache[z.id].length > 0) return; // already have real data
-        const r0 = {
-            date: d0,
-            vals: {}
-          },
-          r1 = {
-            date: d1,
-            vals: {}
-          }; // empty vals on purpose
-        sheetCache[z.id] = [r1, r0]; // oldest first
+        const existing = sheetCache[z.id] || [];
+        const existingDates = new Set(existing.map(r => r.date));
+        // Only seed dates that don't already exist — prevents duplicate rows on every call
+        const toAdd = [];
+        if (!existingDates.has(d1)) toAdd.push({ date: d1, vals: {} });
+        if (!existingDates.has(d0)) toAdd.push({ date: d0, vals: {} });
+        if (toAdd.length > 0) {
+          sheetCache[z.id] = [...existing, ...toAdd].sort((a, b) => dateSort(a.date) - dateSort(b.date));
+        }
       });
     }
 
@@ -6391,6 +6407,10 @@ Be concise and direct. Format with clear numbered sections.`;
       }, 3200);
     }
     async function loadTasks(retrying) {
+      // Don't override in-memory tasks while a save is in progress — that would lose the new task
+      if (!retrying && saveTasksInFlight) {
+        await saveTasksInFlight; // wait for save to finish first
+      }
       try {
         const resp = await fetch(TASKS_URL + "?action=getTasks", {
           cache: "no-store"
@@ -6426,9 +6446,17 @@ Be concise and direct. Format with clear numbered sections.`;
           if (curTab === "tasks") renderTasks();
           return;
         }
-        tasksCache = parsed;
+        // Dedup by task id — prevents duplicate tasks from accumulating over syncs
+        const idSeen = {};
+        const dedupedParsed = parsed.filter(t => {
+          if (!t.id) return true; // keep tasks without id (shouldn't happen but safe)
+          if (idSeen[t.id]) return false;
+          idSeen[t.id] = true;
+          return true;
+        });
+        tasksCache = dedupedParsed;
         tasksLoadedOK = true; // only now are we allowed to overwrite the sheet on save
-        if (parsed.length > 0) backupTasksLocally(parsed); // refresh the safety-net copy
+        if (dedupedParsed.length > 0) backupTasksLocally(dedupedParsed); // refresh the safety-net copy
         if (curTab === "tasks") renderTasks(); // refresh UI if user is already on the tab
       } catch (e) {
         console.error("loadTasks:", e);
@@ -6636,13 +6664,11 @@ Be concise and direct. Format with clear numbered sections.`;
         const aPend = aTasks.filter(t => !t.done).length;
         const aDone = aTasks.filter(t => t.done).length;
         const sorted = [...aTasks].sort((a, b) => {
-          if (a.done !== b.done) return a.done - b.done;
-          const po = {
-            High: 0,
-            Medium: 1,
-            Low: 2
-          };
-          return (po[a.priority] || 1) - (po[b.priority] || 1);
+          if (a.done !== b.done) return a.done - b.done; // pending before done
+          const po = { High: 0, Medium: 1, Low: 2 };
+          const pdiff = (po[a.priority] || 1) - (po[b.priority] || 1);
+          if (pdiff !== 0) return pdiff; // higher priority first
+          return (b.ts || 0) - (a.ts || 0); // newest first within same priority
         });
         if (!unlocked) {
           return `<div class="area-locked" style="margin-bottom:16px">
@@ -6813,7 +6839,10 @@ Be concise and direct. Format with clear numbered sections.`;
         notified: false,
         ts: Date.now()
       };
-      tasksCache.push(task);
+      // Guard against duplicate: if a task with same id already exists (e.g. double-add race), skip
+      if (!tasksCache.find(t => t.id === task.id)) {
+        tasksCache.push(task);
+      }
       const ok = await saveTasks();
       if (ok) {
         showTaskToast("✅ \"" + title + "\" was added and saved to the sheet.", "ok");
@@ -9115,7 +9144,7 @@ Be concise and direct. Format with clear numbered sections.`;
         // Update sheetCache for all found zones
         let newZones = 0;
         for (const zid of zids) {
-          sheetCache[zid] = result[zid];
+          mergeIntoCache(zid, result[zid]); // merge (dedup by date) instead of overwrite
           // ensure zone exists in ZONES array
           if (!ZONES.find(z => z.id === zid)) {
             const knownName = knownZoneName(zid);
@@ -9329,7 +9358,7 @@ Be concise and direct. Format with clear numbered sections.`;
             failed.push(z.name + ' (could not read — first line: "' + hint + '")');
             continue;
           }
-          sheetCache[z.id] = rows;
+          mergeIntoCache(z.id, rows); // merge (dedup by date) instead of overwrite
           // add to ZONES array if new
           if (!ZONES.find(zz => zz.id === z.id)) {
             ZONES.push({
@@ -9781,7 +9810,7 @@ Be concise and direct. Format with clear numbered sections.`;
         }
         // دايماً اكتب الداتا الجديدة وعمل render
         for (const zid of zids) {
-          sheetCache[zid] = result[zid];
+          mergeIntoCache(zid, result[zid]); // merge (dedup by date) instead of overwrite
           if (!ZONES.find(z => z.id === zid)) {
             ZONES.push({
               id: zid,
