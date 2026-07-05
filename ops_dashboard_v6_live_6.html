@@ -2267,6 +2267,7 @@
 </head>
 
 <body>
+  <div id="spark-tip"></div>
   <div class="wrap">
     <div id="login-screen">
       <div id="login-box">
@@ -4348,15 +4349,19 @@
             const barH = Math.max(3, Math.round(heightPct * H));
             const x = i * (barW + gap);
             const y = H - barH;
-            // Color each bar: good/bad based on metric direction + relative position
             const isGood = m.better === 'high' ? v >= (min + range * 0.6) : v <= (min + range * 0.4);
             const isBad  = m.better === 'high' ? v <= (min + range * 0.4) : v >= (min + range * 0.6);
             const barColor = isLast
               ? (isGood ? 'var(--good)' : isBad ? 'var(--bad)' : '#f59e0b')
               : (isGood ? '#86efac' : isBad ? '#fca5a5' : '#d1d5db');
             const opacity = isLast ? '1' : '0.7';
-            return '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH +
-              '" rx="2" fill="' + barColor + '" opacity="' + opacity + '"/>';
+            const label = days[i] + ': ' + fmtV(v, m.fmt);
+            return '<g class="spark-bar-g" data-tip="' + label + '" style="cursor:default"' +
+              ' onmouseenter="showSparkTip(event,this)" onmouseleave="hideSparkTip()">' +
+              '<rect x="' + x + '" y="0" width="' + barW + '" height="' + (H+2) + '" fill="transparent"/>' +
+              '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH +
+              '" rx="2" fill="' + barColor + '" opacity="' + opacity + '"/>' +
+              '</g>';
           }).join('');
           spark = '<svg width="' + totalW + '" height="' + (H+2) + '" style="overflow:visible;display:inline-block">' +
             bars + '</svg>';
@@ -5289,7 +5294,7 @@
       <button class="${fpSubTab==='worst'?'active':''}" onclick="setFpSubTab('worst')">⚠ Worst 3PLs</button>
       <button class="${fpSubTab==='escalation'?'active':''}" onclick="setFpSubTab('escalation')">📤 Escalation</button>
     </div>`;
-      fv.innerHTML = renderWHMonthSelector() + subTabBar + (
+      fv.innerHTML = subTabBar + (
         fpSubTab === "performance" ? renderPerformanceSubTab() :
         fpSubTab === "commitments" ? renderCommitmentsSubTab() :
         fpSubTab === "escalation" ? renderEscalationSubTab() :
@@ -5544,10 +5549,21 @@
         });
       });
       const filterBar = `<div class="panel" style="padding:14px 14px 4px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${availableWHMonths.length > 1 ? `
+        <span style="font-size:12px;color:var(--muted);font-weight:600">📅 Month:</span>
+        <select onchange="selectedWHMonth=this.value;loadWHData().then(()=>renderFollowUps())"
+          style="font-size:12px;padding:5px 12px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--text);cursor:pointer">
+          ${availableWHMonths.map(m => {
+            const label = m.replace(/^3pl wh /i,'').replace(/^w/,s=>s.toUpperCase());
+            return `<option value="${m}" ${selectedWHMonth===m?'selected':''}>${label}</option>`;
+          }).join('')}
+        </select>` : ''}
+      </div>
       <select onchange="perfNameFilter=this.value;renderFollowUps()"
-        style="padding:7px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
-        background:var(--ink2);color:#fff;cursor:pointer;min-width:140px">
+        style="padding:6px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:12px;font-weight:600;font-family:inherit;
+        background:var(--card);color:var(--text);cursor:pointer;min-width:130px">
         ${nameOpts}
       </select>
     </div>
@@ -10344,6 +10360,29 @@ Be concise and direct. Format with clear numbered sections.`;
         </div>`;
       }
     }
+  
+    function showSparkTip(e, el) {
+      const tip = document.getElementById('spark-tip');
+      if (!tip) return;
+      tip.textContent = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+      positionSparkTip(e);
+    }
+    function positionSparkTip(e) {
+      const tip = document.getElementById('spark-tip');
+      if (!tip || tip.style.display === 'none') return;
+      const x = e.clientX + 12, y = e.clientY - 32;
+      tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 8) + 'px';
+      tip.style.top = Math.max(4, y) + 'px';
+    }
+    function hideSparkTip() {
+      const tip = document.getElementById('spark-tip');
+      if (tip) tip.style.display = 'none';
+    }
+    document.addEventListener('mousemove', function(e) {
+      const tip = document.getElementById('spark-tip');
+      if (tip && tip.style.display !== 'none') positionSparkTip(e);
+    });
   </script>
 
 <div id="cpOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
