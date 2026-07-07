@@ -3538,6 +3538,9 @@
     // ════════════════════════════════════════════
     let offSubTab = "table"; // table | ai | zones | leaders | repeats | history
     let offRiderSearch = "";
+    let offAIWeek = null;
+    let offTableWeek = null;
+    const normalizeType = t => { const s = (t||"").toString().trim().toLowerCase(); if (s==="full"||s==="f"||s==="fulltime"||s==="full time") return "Full"; if (s==="part"||s==="p"||s==="parttime"||s==="part time"||s==="pt") return "Part"; return null; };
     let offAIResult = "";
     let offAILoading = false;
 
@@ -3597,24 +3600,37 @@
 
     // ── SUB-TAB: Offenders Table ──
     function offRenderTable() {
+      const allWeeks = [...new Set(offendersCache.map(r=>r.week||0))].filter(Boolean).sort((a,b)=>b-a);
+      if (!offTableWeek || !allWeeks.includes(offTableWeek)) offTableWeek = allWeeks[0] || 0;
       const kpi = OFF_KPIS.find(k => k.id === offKPI) || OFF_KPIS[0];
-      const latest = offLatestRows();
+      const latest = offendersCache.filter(r => (r.week||0) === offTableWeek);
+      const week = offTableWeek;
       const zones = ["all", ...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
       const ZONES_WITH_TYPES_T = ["Mohandiseen", "Giza"];
       const zoneHasTypes = offZone !== "all" && ZONES_WITH_TYPES_T.some(zn => offZone.toLowerCase().includes(zn.toLowerCase()));
       let rows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
-      if (zoneHasTypes && offType !== "all") rows = rows.filter(r => r.type === offType);
+      if (zoneHasTypes && offType !== "all") rows = rows.filter(r => normalizeType(r.type) === offType);
       const thresh = parseFloat(offThreshold);
       if (!isNaN(thresh)) rows = kpi.dir === "high" ? rows.filter(r => (r[kpi.field]||0) > thresh) : rows.filter(r => (r[kpi.field]||0) < thresh);
       rows = [...rows].sort((a,b) => kpi.dir === "high" ? (b[kpi.field]||0)-(a[kpi.field]||0) : (a[kpi.field]||0)-(b[kpi.field]||0));
       const topN = parseInt(offCount) || 10;
       const displayed = rows.slice(0, topN);
+
       const zoneRows = offZone === "all" ? latest : latest.filter(r => r.zone === offZone);
       const avgBefore = zoneRows.length ? zoneRows.reduce((s,r)=>s+(r[kpi.field]||0),0)/zoneRows.length : 0;
       const remaining = zoneRows.filter(r => !displayed.find(d => d.id === r.id));
       const avgAfter  = remaining.length ? remaining.reduce((s,r)=>s+(r[kpi.field]||0),0)/remaining.length : 0;
 
-      return '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
+      const weekPickerHtml = allWeeks.length > 1
+        ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">' +
+          '<span style="font-size:12px;font-weight:700;color:var(--muted)">Week:</span>' +
+          allWeeks.map(w => '<button onclick="offTableWeek='+w+';renderOffenders()" style="font-size:12px;padding:4px 12px;border-radius:20px;cursor:pointer;font-weight:700;border:1px solid;' +
+            (w===week ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--flat-bg);color:var(--flat);border-color:var(--line)') + '">W'+w+'</button>').join("") +
+          '</div>'
+        : '';
+
+      return weekPickerHtml +
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--line)">' +
         '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Zone</label><select onchange="offZone=this.value;offType=\'all\';renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + zones.map(z=>'<option value="'+z+'" '+(offZone===z?"selected":"")+'>'+( z==="all"?"All Zones":z)+'</option>').join("") + '</select></div>' +
         (zoneHasTypes ? '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">Type</label><select onchange="offType=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)"><option value="all" '+(offType==="all"?"selected":"")+'>All Types</option><option value="Full" '+(offType==="Full"?"selected":"")+'>Full Time</option><option value="Part" '+(offType==="Part"?"selected":"")+'>Part Time</option></select></div>' : '') +
         '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600">KPI</label><select onchange="offKPI=this.value;renderOffenders()" style="font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--card);color:var(--ink)">' + OFF_KPIS.map(k=>'<option value="'+k.id+'" '+(offKPI===k.id?"selected":"")+'>'+k.label+'</option>').join("") + '</select></div>' +
@@ -3643,8 +3659,10 @@
 
     // ── SUB-TAB: Weekly Summary (no API) ──
     function offRenderAI() {
-      const latest = offLatestRows();
-      const week = offLatestWeek();
+      const allWeeks = [...new Set(offendersCache.map(r=>r.week||0))].filter(Boolean).sort((a,b)=>b-a);
+      if (!offAIWeek || !allWeeks.includes(offAIWeek)) offAIWeek = allWeeks[0] || 0;
+      const latest = offendersCache.filter(r => (r.week||0) === offAIWeek);
+      const week = offAIWeek;
       const zones = [...new Set(latest.map(r => r.zone).filter(Boolean))].sort();
       const kpis = [
         { id: "noshow", label: "No Show",    field: "noshow", dir: "high" },
@@ -3653,17 +3671,26 @@
         { id: "avp",    label: "AVP%",       field: "avp",    dir: "low"  },
       ];
 
-      let html = '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">📅 Week ' + week + ' — أسوأ 10 طيارين لكل KPI في كل منطقة</div>';
+      const weekPicker = allWeeks.length > 1
+        ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">' +
+          '<span style="font-size:12px;font-weight:700;color:var(--muted)">Week:</span>' +
+          allWeeks.map(w => '<button onclick="offAIWeek='+w+';renderOffenders()" style="font-size:12px;padding:4px 12px;border-radius:20px;cursor:pointer;font-weight:700;border:1px solid;' +
+            (w===week ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--flat-bg);color:var(--flat);border-color:var(--line)') + '">W'+w+'</button>').join("") +
+          '</div>'
+        : '';
+
+      let html = weekPicker + '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">📅 Week ' + week + ' — أسوأ 10 طيارين لكل KPI في كل منطقة</div>';
 
       const ZONES_WITH_TYPES = ["Mohandiseen", "Giza"];
+
 
       zones.forEach(z => {
         const zr = latest.filter(r => r.zone === z);
         const hasTypes = ZONES_WITH_TYPES.some(zn => z.toLowerCase().includes(zn.toLowerCase()))
-          && zr.some(r => r.type === "Full" || r.type === "Part");
+          && zr.some(r => normalizeType(r.type) !== null);
         const groups = hasTypes
-          ? [{ label: "Full Time", rows: zr.filter(r => r.type === "Full") },
-             { label: "Part Time", rows: zr.filter(r => r.type === "Part") }]
+          ? [{ label: "Full Time", rows: zr.filter(r => normalizeType(r.type) === "Full") },
+             { label: "Part Time", rows: zr.filter(r => normalizeType(r.type) === "Part") }]
           : [{ label: null, rows: zr }];
 
         groups.forEach(group => {
@@ -3736,7 +3763,7 @@
       const items = [];
       zones.forEach(z => {
         const hasTypes = ZONES_WITH_TYPES_E.some(zn => z.toLowerCase().includes(zn.toLowerCase()))
-          && latest.filter(r=>r.zone===z).some(r => r.type === "Full" || r.type === "Part");
+          && latest.filter(r=>r.zone===z).some(r => normalizeType(r.type) !== null);
         if (hasTypes) {
           items.push({ label: z + " — Full", zone: z, type: "Full" });
           items.push({ label: z + " — Part", zone: z, type: "Part" });
@@ -3761,7 +3788,7 @@
       const rows = [];
       checked.forEach(sel => {
         let gr = latest.filter(r => r.zone === sel.zone);
-        if (sel.type) gr = gr.filter(r => r.type === sel.type);
+        if (sel.type) gr = gr.filter(r => normalizeType(r.type) === sel.type);
         if (!gr.length) return;
         const usedIds = new Set();
         kpis.forEach(kpi => {
@@ -3844,18 +3871,58 @@
     function offRenderRepeats() {
       const weeks = [...new Set(offendersCache.map(r=>r.week||0))].sort((a,b)=>a-b);
       if (weeks.length < 2) return '<div style="padding:40px;text-align:center;color:var(--muted)">Need at least 2 weeks of data to show repeat offenders</div>';
+      const kpis = [
+        { id: "noshow", field: "noshow", dir: "high" },
+        { id: "late",   field: "late",   dir: "high" },
+        { id: "breaks", field: "breaks", dir: "high" },
+        { id: "avp",    field: "avp",    dir: "low"  },
+      ];
+
+      // Build set of rider IDs that appeared in top-10 cards per week per zone per KPI
+      const appearedInCard = {}; // key: `${id}|${week}`
+      weeks.forEach(w => {
+        const wRows = offendersCache.filter(r => (r.week||0) === w);
+        const zones = [...new Set(wRows.map(r => r.zone).filter(Boolean))];
+        zones.forEach(z => {
+          const zr = wRows.filter(r => r.zone === z);
+          // handle Full/Part split like Weekly Summary
+          const hasTypes = ["Mohandiseen","Giza"].some(zn => z.toLowerCase().includes(zn.toLowerCase()))
+            && zr.some(r => normalizeType(r.type) !== null);
+          const groups = hasTypes
+            ? [zr.filter(r => normalizeType(r.type) === "Full"), zr.filter(r => normalizeType(r.type) === "Part")]
+            : [zr];
+          groups.forEach(gr => {
+            const usedIds = new Set();
+            kpis.forEach(kpi => {
+              [...gr].filter(r => (r[kpi.field]||0) > 0 && !usedIds.has(r.id))
+                .sort((a,b) => kpi.dir === "high" ? (b[kpi.field]||0)-(a[kpi.field]||0) : (a[kpi.field]||0)-(b[kpi.field]||0))
+                .slice(0, 10)
+                .forEach(r => { usedIds.add(r.id); appearedInCard[r.id + '|' + w] = true; });
+            });
+          });
+        });
+      });
+      // Now find riders who appeared in cards in 2+ consecutive weeks
       const counts = {};
       offendersCache.forEach(r => {
-        if ((r.noshow||0) > 0 || (r.late||0) > 0) {
+        if (appearedInCard[r.id + '|' + (r.week||0)]) {
           if (!counts[r.id]) counts[r.id] = { id: r.id, zone: r.zone, weeks: new Set(), noshow: 0, late: 0 };
-          counts[r.id].weeks.add(r.week);
+          counts[r.id].weeks.add(r.week||0);
           counts[r.id].noshow += (r.noshow||0);
           counts[r.id].late += (r.late||0);
         }
       });
-      const repeats = Object.values(counts).filter(r => r.weeks.size >= 2).sort((a,b) => b.weeks.size - a.weeks.size);
+      // Filter: appeared in 2+ consecutive weeks
+      const repeats = Object.values(counts).filter(r => {
+        const ws = [...r.weeks].sort((a,b)=>a-b);
+        if (ws.length < 2) return false;
+        for (let i = 0; i < ws.length - 1; i++) {
+          if (ws[i+1] - ws[i] === 1) return true;
+        }
+        return false;
+      }).sort((a,b) => b.weeks.size - a.weeks.size);
       if (!repeats.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">No repeat offenders found across weeks</div>';
-      return '<div style="margin-bottom:12px;font-size:13px;color:var(--muted)">Riders with issues in 2+ weeks</div>' +
+      return '<div style="margin-bottom:12px;font-size:13px;color:var(--muted)">Riders who appeared in the worst-10 cards in 2+ <b>consecutive</b> weeks</div>' +
         '<div class="panel" style="overflow-x:auto;padding:0"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
         '<thead><tr style="border-bottom:2px solid var(--line)">' +
         '<th style="padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;font-weight:700">RIDER ID</th>' +
