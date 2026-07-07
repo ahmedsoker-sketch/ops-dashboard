@@ -2841,6 +2841,12 @@
         }
       },
     ];
+    /* ── Zone Groups ── */
+    const ZONE_GROUPS = [
+      { label: "🌅 West", ids: ["zay", "wat", "smt", "oct", "pal"] },
+      { label: "🏙️ Central West", ids: ["moh", "had", "sho", "ccc", "giz", "hah"] }
+    ];
+
     /* ---------- offices: working hours per office [Jun 13, Jun 12] ---------- */
     const OFFICES = {
       had: [
@@ -8043,11 +8049,10 @@ Be concise and direct. Format with clear numbered sections.`;
           good
         });
       });
-      zvals.sort((a, b) => m.better === "high" ? b.v - a.v : a.v - b.v);
       const periodLabel = deepDiveMode === "day" ? deepDiveDay : deepDiveMode === "week" ? "Week " + deepDiveWeek : monthNames[deepDiveMonth] || "";
       if (!zvals.length) return `<div class="panel"><div style="padding:20px;color:var(--muted)">No data available</div></div>`;
       const maxVal = Math.max(...zvals.map(z => z.v));
-      const bars = zvals.map((z, i) => {
+      const makeBar = (z, i) => {
         const pct = maxVal > 0 ? (z.v / maxVal) * 100 : 0;
         const barColor = z.good === true ? "var(--good)" : z.good === false ? "var(--bad)" : "var(--accent)";
         const tgtCell = deepDiveEditTgt ?
@@ -8065,6 +8070,24 @@ Be concise and direct. Format with clear numbered sections.`;
       </div>
       ${tgtCell}
     </div>`;
+      };
+      const groupedBars = ZONE_GROUPS.map(grp => {
+        const grpZones = zvals.filter(z => grp.ids.includes(z.zid));
+        grpZones.sort((a, b) => m.better === "high" ? b.v - a.v : a.v - b.v);
+        if (!grpZones.length) return "";
+        const grpAvg = grpZones.reduce((s, z) => s + z.v, 0) / grpZones.length;
+        const grpTgt = grpZones.map(z => z.zt).find(t => t != null);
+        const avgGood = grpTgt != null ? (m.better === "high" ? grpAvg >= grpTgt : grpAvg <= grpTgt) : null;
+        const avgColor = avgGood === true ? "var(--good)" : avgGood === false ? "var(--bad)" : "var(--accent)";
+        const avgBg = avgGood === true ? "var(--good-bg)" : avgGood === false ? "var(--bad-bg)" : "var(--flat-bg)";
+        return `
+          <div style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 8px;border-bottom:1px solid var(--line);margin-bottom:12px">
+              <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${grp.label}</div>
+              <div style="font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;background:${avgBg};color:${avgColor}">avg ${fmtVal(grpAvg, m.fmt)}</div>
+            </div>
+            ${grpZones.map((z, i) => makeBar(z, i)).join("")}
+          </div>`;
       }).join("");
       return `<div class="panel">
     <div class="ptitle" style="flex-wrap:wrap;gap:8px">
@@ -8085,7 +8108,7 @@ Be concise and direct. Format with clear numbered sections.`;
         </button>
       </div>
     </div>
-    <div style="padding:16px">${bars}</div>
+    <div style="padding:16px">${groupedBars}</div>
   </div>`;
     }
     /* ── 2. Gap to Target Summary ── */
@@ -8468,6 +8491,20 @@ Be concise and direct. Format with clear numbered sections.`;
       };
       const rows = badAnomalies.map(makeRow).join("");
       const goodRows = goodAnomalies.map(makeRow).join("");
+      const makeGroupedRows = (list) => {
+        return ZONE_GROUPS.map(grp => {
+          const grpItems = list.filter(a => {
+            const z = ZONES.find(z => z.name === a.zone);
+            return z && grp.ids.includes(z.id);
+          });
+          if (!grpItems.length) return "";
+          return `
+            <div>
+              <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:10px 16px 8px;border-bottom:1px solid var(--line)">${grp.label}</div>
+              ${grpItems.map(makeRow).join("")}
+            </div>`;
+        }).join("");
+      };
       return `<div>
     <div class="panel" style="margin-bottom:16px">
       <div class="ptitle">
@@ -8475,7 +8512,7 @@ Be concise and direct. Format with clear numbered sections.`;
         <span class="chip" style="background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)">${badAnomalies.length} anomaly${badAnomalies.length!==1?"ies":""}</span>
       </div>
       <div style="padding:0 16px">${pickerBar}</div>
-      ${rows||`<div style="padding:20px;text-align:center;color:var(--good);font-size:13px;font-weight:700">✅ No issues detected!</div>`}
+      ${badAnomalies.length ? makeGroupedRows(badAnomalies) : `<div style="padding:20px;text-align:center;color:var(--good);font-size:13px;font-weight:700">✅ No issues detected!</div>`}
     </div>
     ${goodAnomalies.length>0?`
     <div class="panel">
@@ -8483,7 +8520,7 @@ Be concise and direct. Format with clear numbered sections.`;
         <h2 style="font-size:15px">⭐ Positive Surprises — ${periodLabel}</h2>
         <span class="chip" style="background:var(--good-bg);color:var(--good);border-color:var(--good-line)">${goodAnomalies.length} surprise${goodAnomalies.length!==1?"s":""}</span>
       </div>
-      ${goodRows}
+      ${makeGroupedRows(goodAnomalies)}
     </div>`:""}
   </div>`;
     }
