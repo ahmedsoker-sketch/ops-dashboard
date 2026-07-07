@@ -3906,10 +3906,12 @@
       const counts = {};
       offendersCache.forEach(r => {
         if (appearedInCard[r.id + '|' + (r.week||0)]) {
-          if (!counts[r.id]) counts[r.id] = { id: r.id, zone: r.zone, weeks: new Set(), noshow: 0, late: 0 };
+          if (!counts[r.id]) counts[r.id] = { id: r.id, zone: r.zone, weeks: new Set(), noshow: 0, late: 0, breaks: 0, avpSum: 0, avpCount: 0 };
           counts[r.id].weeks.add(r.week||0);
           counts[r.id].noshow += (r.noshow||0);
           counts[r.id].late += (r.late||0);
+          counts[r.id].breaks += (r.breaks||0);
+          if (r.avp != null) { counts[r.id].avpSum += (r.avp||0); counts[r.id].avpCount++; }
         }
       });
       // Filter: appeared in 2+ consecutive weeks
@@ -3930,13 +3932,17 @@
         '<th style="padding:10px 14px;text-align:center;color:var(--muted);font-size:11px;font-weight:700">WEEKS</th>' +
         '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">TOTAL NO SHOW</th>' +
         '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">TOTAL LATE</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">TOTAL BREAKS</th>' +
+        '<th style="padding:10px 14px;text-align:right;color:var(--muted);font-size:11px;font-weight:700">AVG AVP%</th>' +
         '</tr></thead><tbody>' +
         repeats.map((r,i) => '<tr style="background:'+(i%2===0?'var(--flat-bg)':'var(--card)')+';border-bottom:1px solid var(--line)">' +
           '<td style="padding:9px 14px;font-weight:700;cursor:pointer;color:var(--accent)" onclick="offRiderSearch=String(r.id);offSubTab=\'history\';renderOffenders()">'+r.id+'</td>' +
           '<td style="padding:9px 14px">'+r.zone+'</td>' +
           '<td style="padding:9px 14px;text-align:center"><span style="background:var(--bad-bg);color:var(--bad);font-weight:700;padding:2px 10px;border-radius:20px;font-size:12px">'+r.weeks.size+' weeks</span></td>' +
           '<td style="padding:9px 14px;text-align:right;color:var(--bad);font-weight:700">'+r.noshow+'</td>' +
-          '<td style="padding:9px 14px;text-align:right">'+r.late+'</td></tr>'
+          '<td style="padding:9px 14px;text-align:right">'+r.late+'</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+r.breaks.toFixed(1)+'h</td>' +
+          '<td style="padding:9px 14px;text-align:right">'+(r.avpCount>0?(r.avpSum/r.avpCount).toFixed(1)+'%':'—')+'</td></tr>'
         ).join("") +
         '</tbody></table></div>';
     }
