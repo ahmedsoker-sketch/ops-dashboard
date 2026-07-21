@@ -4879,6 +4879,10 @@
     let whDates = [];
     let whTargets = {};
     let whDataLoadedOK = false;
+    /* allMonthsWHCache: stores WH data for ALL months so commitments across
+       different months can all be resolved correctly.
+       Structure: { "3PL WH july": { cache: {zid:{tpl:[hours]}}, dates: [...] }, ... } */
+    let allMonthsWHCache = {};
     async function loadWHData() {
       try {
         const monthParam = selectedWHMonth ? "&month=" + encodeURIComponent(selectedWHMonth) : "";
@@ -4967,6 +4971,9 @@
             if (Array.isArray(parsed) && parsed.length > 0) {
               availableWHMonths = parsed;
               if (!selectedWHMonth) selectedWHMonth = parsed[parsed.length - 1];
+              // Load WH data for ALL months in background so commitments tab
+              // can resolve actual hours regardless of which month is selected.
+              loadAllMonthsWHData(parsed).catch(() => {});
             }
           } catch(me) { console.log("months fetch error:", me); }
         }
@@ -4977,6 +4984,102 @@
         console.error("loadWHData error:", e);
       }
     }
+    /* Load WH data for ALL available months and store in allMonthsWHCache.
+       Called once in the background after availableWHMonths is populated. */
+    async function loadAllMonthsWHData(months) {
+      // Helper: parse a WH CSV text into {cache, dates} — same logic as loadWHData
+      function parseWHText(text) {
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) return null;
+        function splitCSV(line) {
+          const out = []; let cur = "", q = false;
+          for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') { if (q && line[i+1]==='"'){cur+='"';i++;}else q=!q; }
+            else if (c === ',' && !q) { out.push(cur.trim()); cur = ""; }
+            else cur += c;
+          }
+          out.push(cur.trim()); return out;
+        }
+        const headers = splitCSV(lines[0]).map(h => h.replace(/^"|"$/g,"").trim());
+        let dateEndCol = 3;
+        for (let j = 3; j < headers.length; j++) {
+          const h = headers[j];
+          if (/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h)) { dateEndCol = j+1; }
+          else if (dateEndCol > 3) break;
+        }
+        const dates = headers.slice(3, dateEndCol);
+        const zoneData = {};
+        for (let i = 1; i < lines.length; i++) {
+          const cells = splitCSV(lines[i]).map(c => c.replace(/^"|"$/g,"").trim());
+          const tplName = cells[1] || ""; const zoneName = cells[2] || "";
+          if (!tplName || !zoneName) continue;
+          const zid = zoneIdFromName(zoneName); if (!zid) continue;
+          if (!zoneData[zid]) zoneData[zid] = {};
+          zoneData[zid][tplName] = cells.slice(3, dateEndCol).map(v => { const n=parseFloat(v); return isNaN(n)?0:n; });
+        }
+        return { cache: zoneData, dates };
+      }
+      for (const month of months) {
+        if (allMonthsWHCache[month]) continue; // already loaded
+        try {
+          const resp = await fetch(APPS_SCRIPT_URL + "?action=getWH&month=" + encodeURIComponent(month), { cache: "no-store" });
+          if (!resp.ok) continue;
+          const text = await resp.text();
+          if (!text || text.startsWith("ERROR") || text === "[]") continue;
+          const parsed = parseWHText(text);
+          if (parsed) {
+            allMonthsWHCache[month] = parsed;
+            console.log("allMonthsWHCache loaded:", month, "dates:", parsed.dates.length);
+          }
+        } catch(e) { console.log("loadAllMonthsWHData error for", month, e); }
+      }
+      // Re-render commitments tab if open so statuses update
+      if (curTab === "followup") renderFollowUps();
+    }
+
+    /* Look up actual hours across ALL loaded months — used by commitments tab so
+       a commitment in July resolves correctly even if June is the selected month.
+       Falls back to the current whCache/whDates if allMonthsWHCache is empty. */
+    function getActualHoursForCommitment(zid, threePl, isoDate) {
+      // Determine which month tab the isoDate falls in
+      // isoDate = "2026-07-15" → month number 7
+      if (!isoDate) return null;
+      const parts = isoDate.split("-");
+      if (parts.length !== 3) return null;
+      const targetMo = parseInt(parts[1], 10);
+      const targetDay = parseInt(parts[2], 10);
+      const label = isoToShortLabel(isoDate);
+
+      // Try allMonthsWHCache first — find the month whose dates contain isoDate
+      for (const [monthKey, monthData] of Object.entries(allMonthsWHCache)) {
+        const { cache, dates } = monthData;
+        // Find column in this month's dates
+        const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+        let colIdx = -1;
+        for (let i = 0; i < dates.length; i++) {
+          const d = dates[i].trim();
+          const fullM = d.match(/\b([A-Za-z]{3})\s+(\d{1,2})\b/);
+          if (fullM) {
+            const dMo = months[fullM[1].toLowerCase()];
+            if (dMo === targetMo && parseInt(fullM[2]) === targetDay) { colIdx = i; break; }
+          }
+          const dm = d.match(/^(\d+)\/(\d+)/);
+          if (dm && parseInt(dm[1])===targetMo && parseInt(dm[2])===targetDay) { colIdx=i; break; }
+        }
+        if (colIdx < 0) continue;
+        const zd = cache[zid];
+        if (!zd) continue;
+        const key = Object.keys(zd).find(n => n.trim().toLowerCase() === String(threePl).trim().toLowerCase());
+        if (!key) continue;
+        const v = zd[key][colIdx];
+        return (v == null || isNaN(v)) ? null : Math.round(v);
+      }
+
+      // Fallback to current whCache (selected month)
+      return getActualHoursFor3PL(zid, threePl, isoDate);
+    }
+
     /* Get hours for a zone's 3PLs for a specific date label like "Jun 13" */
     function getWHForDate(zid, dateLabel) {
       const zd = whCache[zid];
@@ -5448,8 +5551,8 @@
           const mm = String(dlDateObj.getMonth() + 1).padStart(2, '0');
           const dd = String(dlDateObj.getDate()).padStart(2, '0');
           const deadlineStr = `${yyyy}-${mm}-${dd}`;
-          // 2️⃣ قراءة الساعات الفكرية بنفس النص النظيف
-          const actual = getActualHoursFor3PL(f.zone, f.threePl, deadlineStr);
+          // 2️⃣ قراءة الساعات بنفس النص النظيف — بيبحث في كل الشهور مش بس الـ selected
+          const actual = getActualHoursForCommitment(f.zone, f.threePl, deadlineStr);
           const officeTarget = (whTargets[f.zone] && whTargets[f.zone][f.threePl] != null) ? whTargets[f.zone][f.threePl] : null;
           // 3️⃣ تحويل تاريخ "النهاردة" لنفس النص الصريح (لتجنب مشاكل الوقت والـ Timezone)
           const todayObj = new Date(todayISO());
@@ -5495,7 +5598,7 @@
       const achieved = filteredFollowUps.filter(f => {
         const dlObj = new Date(f.deadline);
         const dlStr = `${dlObj.getFullYear()}-${String(dlObj.getMonth()+1).padStart(2,'0')}-${String(dlObj.getDate()).padStart(2,'0')}`;
-        const a = getActualHoursFor3PL(f.zone, f.threePl, dlStr);
+        const a = getActualHoursForCommitment(f.zone, f.threePl, dlStr);
         return a != null && a >= f.hours;
       }).length;
       const notAchieved = filteredFollowUps.filter(f => {
@@ -5503,7 +5606,7 @@
         const dlStr = `${dlObj.getFullYear()}-${String(dlObj.getMonth()+1).padStart(2,'0')}-${String(dlObj.getDate()).padStart(2,'0')}`;
         const todayObj = new Date(todayISO());
         const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
-        const a = getActualHoursFor3PL(f.zone, f.threePl, dlStr);
+        const a = getActualHoursForCommitment(f.zone, f.threePl, dlStr);
         return a != null && a > 0 && a < f.hours && dlStr <= todayStr;
       }).length;
       const pendingCount = totalCommits - achieved - notAchieved;
