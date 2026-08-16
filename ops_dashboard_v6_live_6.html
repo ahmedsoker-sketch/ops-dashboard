@@ -3316,7 +3316,9 @@
       };
       const iso = d.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (iso) return parseInt(iso[1]) * 10000 + parseInt(iso[2]) * 100 + parseInt(iso[3]);
-      const m = d.match(/([a-z]+)\s*(\d+)/i);
+      // skip weekday prefix if present (e.g. "Saturday, August 15")
+      const stripped = d.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)\w*,\s*/i, "");
+      const m = stripped.match(/([a-z]+)\s*(\d+)/i);
       if (m) {
         const mo = months[m[1].toLowerCase().slice(0, 3)] || 0;
         return mo * 100 + parseInt(m[2]);
@@ -8943,6 +8945,8 @@ Be concise and direct. Format with clear numbered sections.`;
       if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(t)) return true;
       // Arabic month names
       if (/يناير|فبراير|مارس|إبريل|ابريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر/.test(t)) return true;
+      // "Saturday, August 15" or "Monday, June 3, 2025"
+      if (/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday),\s+\w+\s+\d+/i.test(t)) return true;
       // Excel serial number (large number like 45000+)
       if (/^\d{5}$/.test(t.trim())) return true;
       return false;
@@ -8977,6 +8981,12 @@ Be concise and direct. Format with clear numbered sections.`;
           month: "short",
           day: "numeric"
         });
+      // "Saturday, August 15" or "Thursday, August 13"
+      const wdm = t.match(/^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),\s+(\w+)\s+(\d+)(?:,\s*(\d{4}))?/i);
+      if (wdm) {
+        const yr = wdm[3] ? parseInt(wdm[3]) : new Date().getFullYear();
+        const d = new Date(yr + " " + wdm[1] + " " + wdm[2]);
+        if (!isNaN(d)) return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       }
       return t; // keep as-is if nothing matches
     }
