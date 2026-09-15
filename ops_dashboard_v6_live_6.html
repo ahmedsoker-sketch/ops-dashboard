@@ -4970,7 +4970,14 @@
             const parsed = JSON.parse(mText);
             if (Array.isArray(parsed) && parsed.length > 0) {
               availableWHMonths = parsed;
-              if (!selectedWHMonth) selectedWHMonth = parsed[parsed.length - 1];
+              if (!selectedWHMonth) {
+                // Default to LATEST month (current month) for both hours and Normal Target
+                selectedWHMonth = parsed[parsed.length - 1];
+                // FIX: initial load used no month param — may return stale/default data.
+                // Reload now with the correct current month so Normal Target is always fresh.
+                await loadWHData();
+                if (curTab === "followup") renderFollowUps();
+              }
               // Load WH data for ALL months in background so commitments tab
               // can resolve actual hours regardless of which month is selected.
               loadAllMonthsWHData(parsed).catch(() => {});
