@@ -4928,11 +4928,9 @@
         // Stop at first non-date-looking header after col 3
         let dateEndCol = 3;
         for (let j = 3; j < headers.length; j++) {
-          const h = headers[j].trim();
-          const _dn = parseInt(h);
-          const _isDay = /^\d{1,2}$/.test(h) && _dn >= 1 && _dn <= 31;
-          // date headers: month name, slash-format, or pure day number (1-31)
-          if (/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h) || _isDay) {
+          const h = headers[j];
+          // date headers contain month names or slashes
+          if (/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h)) {
             dateEndCol = j + 1;
           } else if (dateEndCol > 3) break; // stop once we hit non-date
         }
@@ -4962,6 +4960,11 @@
         whCache = zoneData;
         whTargets = targetData;
         whDataLoadedOK = true;
+        // CRITICAL: also cache current month into allMonthsWHCache so commitment
+        // lookups work even if background per-month fetches haven't finished yet
+        if (selectedWHMonth) {
+          allMonthsWHCache[selectedWHMonth] = { cache: zoneData, dates: whDates };
+        }
         console.log("WH loaded - dates:", whDates.slice(0, 5), "...total:", whDates.length);
         console.log("WH zones:", Object.keys(whCache));
         // Fetch available months (only once)
@@ -5010,10 +5013,8 @@
         const headers = splitCSV(lines[0]).map(h => h.replace(/^"|"$/g,"").trim());
         let dateEndCol = 3;
         for (let j = 3; j < headers.length; j++) {
-          const h = headers[j].trim();
-          const _dn = parseInt(h);
-          const _isDay = /^\d{1,2}$/.test(h) && _dn >= 1 && _dn <= 31;
-          if (/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h) || _isDay) { dateEndCol = j+1; }
+          const h = headers[j];
+          if (/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\/\d/i.test(h)) { dateEndCol = j+1; }
           else if (dateEndCol > 3) break;
         }
         const dates = headers.slice(3, dateEndCol);
@@ -5062,29 +5063,18 @@
       // Try allMonthsWHCache first — find the month whose dates contain isoDate
       for (const [monthKey, monthData] of Object.entries(allMonthsWHCache)) {
         const { cache, dates } = monthData;
+        // Find column in this month's dates
         const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-        // Infer sheet month from key e.g. "3PL WH Sep" → 9
-        const mkWords = (monthKey||"").toLowerCase().match(/[a-z]{3}/g) || [];
-        const sheetMo = mkWords.reduce((m, w) => m || months[w] || 0, 0);
         let colIdx = -1;
         for (let i = 0; i < dates.length; i++) {
           const d = dates[i].trim();
-          // Pattern A: "Sep 12" or embedded in full date string
           const fullM = d.match(/\b([A-Za-z]{3})\s+(\d{1,2})\b/);
           if (fullM) {
             const dMo = months[fullM[1].toLowerCase()];
             if (dMo === targetMo && parseInt(fullM[2]) === targetDay) { colIdx = i; break; }
           }
-          // Pattern B: "9/12" or "12/9" — try both month/day and day/month
           const dm = d.match(/^(\d+)\/(\d+)/);
-          if (dm) {
-            const a = parseInt(dm[1]), b = parseInt(dm[2]);
-            if ((a===targetMo && b===targetDay) || (a===targetDay && b===targetMo)) { colIdx=i; break; }
-          }
-          // Pattern C: pure day number "5" — month inferred from sheet name
-          if (sheetMo === targetMo && /^\d{1,2}$/.test(d)) {
-            if (parseInt(d) === targetDay) { colIdx = i; break; }
-          }
+          if (dm && parseInt(dm[1])===targetMo && parseInt(dm[2])===targetDay) { colIdx=i; break; }
         }
         if (colIdx < 0) continue;
         const zd = cache[zid];
@@ -5115,33 +5105,39 @@
     }
 
     function findWHDateCol(dateLabel) {
-      // dateLabel like "Jun 13" — matches any date format in whDates
+      // dateLabel like "Jun 13"
+      // WH sheet headers like "Mon Jun 01 2026 00:00:00 GMT+0300..."
       if (!dateLabel) return -1;
       const m = dateLabel.match(/([a-z]+)\s*(\d+)/i);
       if (!m) return -1;
-      const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+      const months = {
+        jan: 1,
+        feb: 2,
+        mar: 3,
+        apr: 4,
+        may: 5,
+        jun: 6,
+        jul: 7,
+        aug: 8,
+        sep: 9,
+        oct: 10,
+        nov: 11,
+        dec: 12
+      };
       const mo = months[m[1].toLowerCase().slice(0, 3)];
       if (!mo) return -1;
       const day = parseInt(m[2]);
-      // Infer sheet month from selectedWHMonth e.g. "3PL WH Sep" → 9
-      const mkWords = (selectedWHMonth||"").toLowerCase().match(/[a-z]{3}/g) || [];
-      const sheetMo = mkWords.reduce((acc, w) => acc || months[w] || 0, 0);
       for (let i = 0; i < whDates.length; i++) {
         const d = whDates[i].trim();
-        // Pattern A: month name embedded ("Sep 12", "Mon Sep 12 2026...")
+        // Match "Mon Jun 01 2026..." format
         const fullM = d.match(/\b([A-Za-z]{3})\s+(\d{1,2})\b/);
         if (fullM) {
           const dMo = months[fullM[1].toLowerCase()];
           if (dMo === mo && parseInt(fullM[2]) === day) return i;
         }
-        // Pattern B: "9/12" or "12/9" — try both month/day and day/month
+        // Fallback: "6/13" format
         const dm = d.match(/^(\d+)\/(\d+)/);
-        if (dm) {
-          const a = parseInt(dm[1]), b = parseInt(dm[2]);
-          if ((a===mo && b===day) || (a===day && b===mo)) return i;
-        }
-        // Pattern C: pure day number — month from selectedWHMonth
-        if (sheetMo === mo && /^\d{1,2}$/.test(d) && parseInt(d) === day) return i;
+        if (dm && parseInt(dm[1]) === mo && parseInt(dm[2]) === day) return i;
       }
       return -1;
     }
@@ -6022,11 +6018,14 @@
        ════════════════════════════════════════════ */
     const HOURS_PER_RIDER = 8; // avg working hours per rider per day (used for rider gap calc)
     function commitStatusShort(zid, name) {
+      // Use LATEST commitment (sorted by createdAt desc)
       const matching = followUpsCache.filter(f =>
         f.zone === zid && f.threePl.trim().toLowerCase() === name.trim().toLowerCase()
       ).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
       const c = matching[0];
       if (!c) return { label: "No commit", cls: "flat", detail: null };
+      // Use getActualHoursForCommitment — searches allMonthsWHCache (which now
+      // always includes current month because loadWHData populates it directly)
       const actualHours = getActualHoursForCommitment(zid, c.threePl, c.deadline);
       const passed = new Date(c.deadline) <= new Date(todayISO());
       const deadlineLabel = (typeof formatNiceDate==="function") ? formatNiceDate(c.deadline) : c.deadline;
