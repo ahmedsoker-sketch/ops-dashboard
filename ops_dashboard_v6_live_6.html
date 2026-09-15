@@ -4971,7 +4971,6 @@
             if (Array.isArray(parsed) && parsed.length > 0) {
               availableWHMonths = parsed;
               if (!selectedWHMonth) {
-                // Pick CHRONOLOGICALLY latest month — alphabetical sort gives wrong results
                 const _mo={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
                 const _n=m=>_mo[m.toLowerCase().replace(/^3pl wh\s*/i,"").trim().slice(0,3)]||0;
                 selectedWHMonth=parsed.reduce((b,m)=>_n(m)>_n(b)?m:b,parsed[0]);
@@ -5039,7 +5038,7 @@
           }
         } catch(e) { console.log("loadAllMonthsWHData error for", month, e); }
       }
-      // Re-render followup tab (commitments + escalation) so statuses update
+      // Re-render commitments tab if open so statuses update
       if (curTab === "followup") renderFollowUps();
     }
 
@@ -6014,20 +6013,36 @@
        ════════════════════════════════════════════ */
     const HOURS_PER_RIDER = 8; // avg working hours per rider per day (used for rider gap calc)
     function commitStatusShort(zid, name) {
-      // Get the LATEST commitment (sorted by createdAt descending)
       const matching = followUpsCache.filter(f =>
         f.zone === zid && f.threePl.trim().toLowerCase() === name.trim().toLowerCase()
-      ).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      ).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
       const c = matching[0];
       if (!c) return { label: "No commit", cls: "flat", detail: null };
-      // Use getActualHoursForCommitment — searches allMonthsWHCache across all months
-      // (same function used by the Commitments tab which is confirmed working)
+
+      // Try getActualHoursForCommitment (searches allMonthsWHCache across ALL months)
       const actualHours = getActualHoursForCommitment(zid, c.threePl, c.deadline);
+
+      // DIAGNOSTIC: log to console so we can see what's happening
+      const nMonths = Object.keys(allMonthsWHCache).length;
+      const hasZone = nMonths > 0 && Object.values(allMonthsWHCache).some(md => md.cache && md.cache[zid]);
+      const hasZoneWH = whCache[zid] ? Object.keys(whCache[zid]).length : 0;
+      console.log("[commitStatus]", zid, c.threePl, c.deadline,
+        "-> hours:", actualHours,
+        "| allMonthsCache months:", nMonths,
+        "| zoneInCache:", hasZone,
+        "| whCacheKeys:", hasZoneWH,
+        "| selectedWHMonth:", selectedWHMonth);
+
       const passed = new Date(c.deadline) <= new Date(todayISO());
-      const deadlineLabel = (typeof formatNiceDate === "function") ? formatNiceDate(c.deadline) : c.deadline;
+      const deadlineLabel = (typeof formatNiceDate==="function") ? formatNiceDate(c.deadline) : c.deadline;
       const detail = { hours: c.hours, deadline: deadlineLabel, actual: actualHours };
+
       if (!passed) return { label: "\u23F3 Pending", cls: "watch", detail };
-      if (actualHours == null) return { label: "\u23F3 No data yet", cls: "watch", detail };
+      if (actualHours == null) {
+        // Show diagnostic reason in chip so we can see it without DevTools
+        const reason = nMonths===0 ? "(cache empty)" : !hasZone ? "(zone missing)" : "(date missing)";
+        return { label: "\u23F3 No data " + reason, cls: "watch", detail };
+      }
       if (actualHours >= c.hours) return { label: "\u2705 Met", cls: "good", detail };
       return { label: "\U0001F6A8 Missed", cls: "bad", detail };
     }
