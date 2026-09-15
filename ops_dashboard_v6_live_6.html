@@ -4971,10 +4971,13 @@
             if (Array.isArray(parsed) && parsed.length > 0) {
               availableWHMonths = parsed;
               if (!selectedWHMonth) {
-                // Default to LATEST month (current month) for both hours and Normal Target
-                selectedWHMonth = parsed[parsed.length - 1];
-                // FIX: initial load used no month param — may return stale/default data.
-                // Reload now with the correct current month so Normal Target is always fresh.
+                // Pick the CHRONOLOGICALLY latest month (not alphabetically last)
+                // "june"/"july" are lowercase, "Aug"/"Sep" are capitalized — alphabetical sort
+                // gives wrong results. Map to month numbers instead.
+                const _moMap = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+                const _getNum = m => _moMap[m.toLowerCase().replace(/^3pl wh\s*/i,"").trim().slice(0,3)] || 0;
+                selectedWHMonth = parsed.reduce((best, m) => _getNum(m) > _getNum(best) ? m : best, parsed[0]);
+                // Reload with the correct current month so Normal Target is always fresh
                 await loadWHData();
                 if (curTab === "followup") renderFollowUps();
               }
