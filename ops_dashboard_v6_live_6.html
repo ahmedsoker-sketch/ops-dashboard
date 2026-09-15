@@ -4972,17 +4972,13 @@
               availableWHMonths = parsed;
               if (!selectedWHMonth) {
                 // Pick the CHRONOLOGICALLY latest month (not alphabetically last)
-                // "june"/"july" are lowercase, "Aug"/"Sep" are capitalized — alphabetical sort
-                // gives wrong results. Map to month numbers instead.
                 const _moMap = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
                 const _getNum = m => _moMap[m.toLowerCase().replace(/^3pl wh\s*/i,"").trim().slice(0,3)] || 0;
                 selectedWHMonth = parsed.reduce((best, m) => _getNum(m) > _getNum(best) ? m : best, parsed[0]);
-                // Reload with the correct current month so Normal Target is always fresh
+                // Reload with correct current month so Normal Target is always fresh
                 await loadWHData();
                 if (curTab === "followup") renderFollowUps();
               }
-              // Load WH data for ALL months in background so commitments tab
-              // can resolve actual hours regardless of which month is selected.
               loadAllMonthsWHData(parsed).catch(() => {});
             }
           } catch(me) { console.log("months fetch error:", me); }
@@ -6019,31 +6015,20 @@
        ════════════════════════════════════════════ */
     const HOURS_PER_RIDER = 8; // avg working hours per rider per day (used for rider gap calc)
     function commitStatusShort(zid, name) {
-      const c = followUpsCache.find(f =>
+      // Get LATEST commitment for this zone+3PL (sorted by createdAt descending)
+      const matching = followUpsCache.filter(f =>
         f.zone === zid && f.threePl.trim().toLowerCase() === name.trim().toLowerCase()
-      );
-      if (!c) return {
-        label: "No commit",
-        cls: "flat"
-      };
+      ).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      const c = matching[0];
+      if (!c) return { label: "No commit", cls: "flat", detail: null };
       const diag = getActualHoursDiagnostic(zid, c.threePl, c.deadline);
       const passed = new Date(c.deadline) <= new Date(todayISO());
-      if (!passed) return {
-        label: "⏳ Commit pending",
-        cls: "watch"
-      };
-      if (diag.hours == null) return {
-        label: "⏳ Awaiting data",
-        cls: "watch"
-      };
-      if (diag.hours >= c.hours) return {
-        label: "✅ Commit met",
-        cls: "good"
-      };
-      return {
-        label: "🚨 Commit missed",
-        cls: "bad"
-      };
+      const deadlineLabel = formatNiceDate ? formatNiceDate(c.deadline) : c.deadline;
+      const detail = { hours: c.hours, deadline: deadlineLabel, actual: diag.hours };
+      if (!passed) return { label: "⏳ Pending", cls: "watch", detail };
+      if (diag.hours == null) return { label: "⏳ No data yet", cls: "watch", detail };
+      if (diag.hours >= c.hours) return { label: "✅ Met", cls: "good", detail };
+      return { label: "🚨 Missed", cls: "bad", detail };
     }
 
   function renderEscalationSubTab() {
@@ -6095,6 +6080,9 @@
     <div style="text-align:right;flex:none">
       <div style="font-size:14px;font-weight:800;color:var(--bad)">−${Math.abs(r.gap).toLocaleString()}h</div>
       <span class="chip ${cs.cls}" style="font-size:9.5px;padding:2px 7px;margin-top:3px;display:inline-block">${cs.label}</span>
+      ${cs.detail ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;text-align:right">
+        ${cs.detail.hours}h by ${cs.detail.deadline}${cs.detail.actual != null ? ` · actual: ${cs.detail.actual}h` : ""}
+      </div>` : ""}
     </div>
   </div>`;
     }).join("");
