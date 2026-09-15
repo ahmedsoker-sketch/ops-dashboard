@@ -4971,13 +4971,14 @@
             if (Array.isArray(parsed) && parsed.length > 0) {
               availableWHMonths = parsed;
               if (!selectedWHMonth) {
-                // Pick the CHRONOLOGICALLY latest month (not alphabetically last)
-                const _moMap = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-                const _getNum = m => _moMap[m.toLowerCase().replace(/^3pl wh\s*/i,"").trim().slice(0,3)] || 0;
-                selectedWHMonth = parsed.reduce((best, m) => _getNum(m) > _getNum(best) ? m : best, parsed[0]);
+                // Pick CHRONOLOGICALLY latest month — alphabetical sort gives wrong results
+                // because of casing differences ("june" vs "Sep")
+                const _mo={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+                const _n=m=>_mo[m.toLowerCase().replace(/^3pl wh\s*/i,"").trim().slice(0,3)]||0;
+                selectedWHMonth=parsed.reduce((b,m)=>_n(m)>_n(b)?m:b,parsed[0]);
                 // Reload with correct current month so Normal Target is always fresh
                 await loadWHData();
-                if (curTab === "followup") renderFollowUps();
+                if(curTab==="followup") renderFollowUps();
               }
               loadAllMonthsWHData(parsed).catch(() => {});
             }
@@ -5210,41 +5211,47 @@
        the 3PL WH sheet yet" from "this 3PL's name doesn't match what's in the
        sheet"). */
     function getActualHoursDiagnostic(zid, threePl, isoDate) {
+      // Same logic as getActualHoursForCommitment — search allMonthsWHCache first
+      // so cross-month commitments (e.g. Aug deadline when Sep is selected) still resolve.
+      if (isoDate) {
+        const _parts = isoDate.split("-");
+        if (_parts.length === 3) {
+          const _tMo = parseInt(_parts[1],10), _tDay = parseInt(_parts[2],10);
+          const _mo = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+          for (const [, mData] of Object.entries(allMonthsWHCache)) {
+            const { cache, dates } = mData;
+            let ci = -1;
+            for (let i = 0; i < dates.length; i++) {
+              const d = dates[i].trim();
+              const fm = d.match(/\b([A-Za-z]{3})\s+(\d{1,2})\b/);
+              if (fm && _mo[fm[1].toLowerCase()]===_tMo && parseInt(fm[2])===_tDay){ci=i;break;}
+              const dm = d.match(/^(\d+)\/(\d+)/);
+              if (dm && parseInt(dm[1])===_tMo && parseInt(dm[2])===_tDay){ci=i;break;}
+            }
+            if (ci < 0) continue;
+            const zd2 = cache[zid]; if (!zd2) continue;
+            const k = Object.keys(zd2).find(n=>n.trim().toLowerCase()===String(threePl).trim().toLowerCase());
+            if (!k) continue;
+            const v = zd2[k][ci];
+            const label2 = isoToShortLabel(isoDate);
+            if (v == null || isNaN(v)) return { hours: null, reason: "cell-empty", label: label2 };
+            return { hours: Math.round(v), reason: "ok", label: label2 };
+          }
+        }
+      }
+      // Fallback: current whCache (selected month)
       const zd = whCache[zid];
-      if (!zd) return {
-        hours: null,
-        reason: "zone-missing"
-      };
+      if (!zd) return { hours: null, reason: "zone-missing" };
       const label = isoToShortLabel(isoDate);
       const colIdx = findWHDateCol(label);
-      if (colIdx < 0) return {
-        hours: null,
-        reason: "date-not-synced",
-        label
-      };
+      if (colIdx < 0) return { hours: null, reason: "date-not-synced", label };
       const key = Object.keys(zd).find(n => n.trim().toLowerCase() === String(threePl).trim().toLowerCase());
-      if (!key) return {
-        hours: null,
-        reason: "3pl-name-mismatch",
-        label
-      };
+      if (!key) return { hours: null, reason: "3pl-name-mismatch", label };
       const hoursArr = zd[key];
-      if (!hoursArr) return {
-        hours: null,
-        reason: "3pl-name-mismatch",
-        label
-      };
+      if (!hoursArr) return { hours: null, reason: "3pl-name-mismatch", label };
       const v = hoursArr[colIdx];
-      if (v == null || isNaN(v)) return {
-        hours: null,
-        reason: "cell-empty",
-        label
-      };
-      return {
-        hours: Math.round(v),
-        reason: "ok",
-        label
-      };
+      if (v == null || isNaN(v)) return { hours: null, reason: "cell-empty", label };
+      return { hours: Math.round(v), reason: "ok", label };
     }
     /* Returns the list of 3PL names with WH data available for a given zone —
        used to populate the 3PL dropdown once a Zone is picked. */
@@ -6015,7 +6022,7 @@
        ════════════════════════════════════════════ */
     const HOURS_PER_RIDER = 8; // avg working hours per rider per day (used for rider gap calc)
     function commitStatusShort(zid, name) {
-      // Get LATEST commitment for this zone+3PL (sorted by createdAt descending)
+      // Get the LATEST commitment for this zone+3PL (by createdAt desc)
       const matching = followUpsCache.filter(f =>
         f.zone === zid && f.threePl.trim().toLowerCase() === name.trim().toLowerCase()
       ).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
@@ -6023,7 +6030,7 @@
       if (!c) return { label: "No commit", cls: "flat", detail: null };
       const diag = getActualHoursDiagnostic(zid, c.threePl, c.deadline);
       const passed = new Date(c.deadline) <= new Date(todayISO());
-      const deadlineLabel = formatNiceDate ? formatNiceDate(c.deadline) : c.deadline;
+      const deadlineLabel = (typeof formatNiceDate==="function") ? formatNiceDate(c.deadline) : c.deadline;
       const detail = { hours: c.hours, deadline: deadlineLabel, actual: diag.hours };
       if (!passed) return { label: "⏳ Pending", cls: "watch", detail };
       if (diag.hours == null) return { label: "⏳ No data yet", cls: "watch", detail };
