@@ -6047,7 +6047,7 @@
       if (!passed) return { label: "\u23F3 Pending", cls: "watch", detail };
       if (actualHours == null) return { label: "\u23F3 No data yet", cls: "watch", detail };
       if (actualHours >= c.hours) return { label: "\u2705 Met", cls: "good", detail };
-      return { label: "\U0001F6A8 Missed", cls: "bad", detail };
+      return { label: "🚨 Missed", cls: "bad", detail };
     }
 
   function renderEscalationSubTab() {
