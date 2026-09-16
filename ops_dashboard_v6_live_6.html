@@ -6077,7 +6077,7 @@
   const zoneIds = Object.keys(byZone);
   if (!zoneIds.length) {
     return `<div class="panel"><div style="padding:24px;color:var(--muted);text-align:center">
-      🎉 No offices are currently under target — nothing to escalate!
+      🎉 No 3PLs are currently under target — nothing to escalate!
     </div></div>`;
   }
   const cards = zoneIds.map(zid => {
@@ -6107,63 +6107,63 @@
     }).join("");
 
     // Build email content
-    const subject = encodeURIComponent(`Escalation – ${zd.zoneName} WH Drop Impact`);
-    const topList = top3.map(r => {
+    const _today = new Date();
+    const _dateStr = _today.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
+    const subject = encodeURIComponent(`[Action Required] Working Hours Shortfall – ${zd.zoneName} Zone | ${_dateStr}`);
+    const topList = top3.map((r, idx) => {
       const cs = commitStatusShort(r.zid, r.name);
       const shareLoss = zoneLoss > 0 ? Math.round((Math.abs(r.gap) / zoneLoss) * 100) : 0;
+      const statusText = cs.detail
+        ? cs.label.replace(/[\u{1F000}-\u{FFFF}]|[\uD800-\uDFFF][\uDC00-\uDFFF]/gu,"").trim()
+        : null;
       let commitLine = "";
       if (cs.detail) {
-        const statusText = cs.label.replace(/[\u{1F000}-\u{FFFF}]|[\uD800-\uDFFF][\uDC00-\uDFFF]/gu, "").trim();
-        commitLine = `\n  └ Last commitment: ${cs.detail.hours}h by ${cs.detail.deadline}` +
-          (cs.detail.actual != null ? ` — Actual: ${cs.detail.actual}h (${statusText})` : " — Pending");
+        commitLine = `\n     Commitment: ${cs.detail.hours}h by ${cs.detail.deadline}` +
+          (cs.detail.actual != null
+            ? ` | Actual Delivered: ${cs.detail.actual}h | Status: ${statusText}`
+            : ` | Status: Pending`);
       } else {
-        commitLine = `\n  └ No commitment on record`;
+        commitLine = `\n     Commitment: No commitment recorded for this 3PL`;
       }
-      return `• ${r.name}: −${Math.abs(r.gap)}h (${shareLoss}% of zone loss)${commitLine}`;
-    }).join("\n");
-    const body = encodeURIComponent(
-      `Hello Team,
+      return `  ${idx+1}. ${r.name}\n     Gap: −${Math.abs(r.gap).toLocaleString()}h (${shareLoss}% of zone total loss) | Target: ${Math.round(r.tgt).toLocaleString()}h${commitLine}`;
+    }).join("\n\n");
 
-Please be advised that the ${zd.zoneName} zone is currently experiencing a critical supply drop, directly impacting our operational capacity.
+    const emailBody =
+`Dear Team,
 
-📊 Performance Impact Summary:
-• Total WH Loss: −${zoneLoss}h
-• Estimated Rider Gap: ~${riderGap} riders
+I am writing to formally escalate a critical Working Hours (WH) shortfall recorded in the ${zd.zoneName} zone as of ${_dateStr}. The data below reflects a significant deviation from operational targets that requires your immediate attention and corrective action.
 
-📍 Top Contributing Offices:
+──────────────────────────────────────────
+ZONE PERFORMANCE SUMMARY — ${zd.zoneName.toUpperCase()}
+──────────────────────────────────────────
+  Zone MTD Average WH  :  ${zoneTotal.toLocaleString()}h
+  Total WH Shortfall   :  −${zoneLoss.toLocaleString()}h
+  Estimated Rider Gap  :  ~${riderGap} riders (based on ${HOURS_PER_RIDER}h avg/rider/day)
+
+──────────────────────────────────────────
+TOP UNDERPERFORMING 3PLs & COMMITMENT STATUS
+──────────────────────────────────────────
 ${topList}
 
-⚠️ Recommendation:
-This gap is significantly impacting our performance and requires urgent attention to avoid further target shortfall. I recommend addressing this with the 3PL immediately and aligning on a recovery plan to close the gap.
+──────────────────────────────────────────
+REQUIRED ACTIONS
+──────────────────────────────────────────
+  1. Formal acknowledgment of this escalation within 24 hours.
+  2. Root cause analysis for each underperforming 3PL listed above.
+  3. A revised recovery commitment with specific daily targets to close the gap.
+  4. Daily WH progress updates until full recovery is achieved.
 
-Please let me know the next steps you’d like me to take.
+Please note that this shortfall is being actively monitored through the Giza Operations Dashboard and will be reported in the weekly performance review. Continued deviation without a recovery plan may result in further escalation to senior management.
 
-Thank you,
-Giza Log Team`
-    );
+Kindly revert at your earliest convenience with confirmation and a corrective action plan.
 
-    // Plain text for clipboard
-    const plainText =
-      `Escalation – ${zd.zoneName} WH Drop Impact
+Best regards,
+Giza Logistics Operations Team`;
 
-Hello Team,
+    const body = encodeURIComponent(emailBody);
 
-Please be advised that the ${zd.zoneName} zone is currently experiencing a critical supply drop, directly impacting our operational capacity.
-
-📊 Performance Impact Summary:
-• Total WH Loss: −${zoneLoss}h
-• Estimated Rider Gap: ~${riderGap} riders
-
-📍 Top Contributing Offices:
-${topList}
-
-⚠️ Recommendation:
-This gap is significantly impacting our performance and requires urgent attention to avoid further target shortfall. I recommend addressing this with the 3PL immediately and aligning on a recovery plan to close the gap.
-
-Please let me know the next steps you’d like me to take.
-
-Thank you,
-Giza Log Team`;
+    // Plain text for clipboard (identical)
+    const plainText = `[Action Required] Working Hours Shortfall – ${zd.zoneName} Zone | ${_dateStr}\n\n${emailBody}`;
 
     return `<div class="panel" style="padding:18px;margin-bottom:14px">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
@@ -6190,14 +6190,14 @@ Giza Log Team`;
     </div>
   </div>
   <div style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">
-    Worst 3 Offices
+    Worst 3 3PLs
   </div>
   ${officeRows}
 </div>`;
   }).join("");
   return `<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
-One card per zone that has offices under target. <b>Rider gap</b> = hours lost ÷ ${HOURS_PER_RIDER}h (avg per rider/day).
-<b>Loss share</b> = office's individual gap as % of the zone's total loss — shows who's driving the drop.
+One card per zone that has 3PLs under target. <b>Rider gap</b> = hours lost ÷ ${HOURS_PER_RIDER}h (avg per rider/day).
+<b>Loss share</b> = 3PL's individual gap as % of the zone's total loss — shows who's driving the drop.
 </div>${cards}`;
 }
 
