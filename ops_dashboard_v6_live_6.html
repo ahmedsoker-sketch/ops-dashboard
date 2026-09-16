@@ -6114,7 +6114,7 @@
       const cs = commitStatusShort(r.zid, r.name);
       const shareLoss = zoneLoss > 0 ? Math.round((Math.abs(r.gap) / zoneLoss) * 100) : 0;
       const statusText = cs.detail
-        ? cs.label.replace(/[\u{1F000}-\u{FFFF}]|[\uD800-\uDFFF][\uDC00-\uDFFF]/gu,"").trim()
+        ? cs.label.replace(/[^\x20-\x7E]/g, "").trim()
         : null;
       let commitLine = "";
       if (cs.detail) {
